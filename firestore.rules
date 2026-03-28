@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields: uid, displayName, email, photoURL, role
+    //
+    // Collection: players
+    // Fields: name, role, battingStyle, bowlingStyle, createdBy
+    //
+    // Collection: teams
+    // Fields: name, logo, players, createdBy
+    //
+    // Collection: tournaments
+    // Fields: name, organizer, teams, createdBy
+    //
+    // Collection: matches
+    // Fields: teamA, teamB, status, tossWinner, tossDecision, overs, scoreA, scoreB, createdBy
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.createdBy;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.displayName is string && data.displayName.size() > 0 &&
+             data.email is string && data.email.size() > 0;
+    }
+
+    function isValidPlayer(data) {
+      return data.keys().hasAll(['name', 'role', 'createdBy']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.role in ['Batsman', 'Bowler', 'All-rounder', 'Wicket-keeper'] &&
+             data.createdBy == request.auth.uid;
+    }
+
+    function isValidTeam(data) {
+      return data.keys().hasAll(['name', 'createdBy']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.createdBy == request.auth.uid;
+    }
+
+    function isValidTournament(data) {
+      return data.keys().hasAll(['name', 'createdBy']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.createdBy == request.auth.uid;
+    }
+
+    function isValidMatch(data) {
+      return data.keys().hasAll(['teamA', 'teamB', 'status', 'createdBy']) &&
+             data.teamA is string && data.teamB is string &&
+             data.status in ['upcoming', 'live', 'completed'] &&
+             data.createdBy == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /players/{playerId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidPlayer(request.resource.data);
+      allow update: if isDocOwner() && isValidPlayer(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /teams/{teamId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidTeam(request.resource.data);
+      allow update: if isDocOwner() && isValidTeam(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /tournaments/{tournamentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidTournament(request.resource.data);
+      allow update: if isDocOwner() && isValidTournament(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /matches/{matchId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidMatch(request.resource.data);
+      allow update: if isDocOwner() && isValidMatch(request.resource.data);
+      allow delete: if isDocOwner();
+
+      match /balls/{ballId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated(); // Simplified for now, should ideally check match ownership
+      }
+    }
+  }
+}

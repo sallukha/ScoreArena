@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] }
+      },
+      "required": ["uid", "displayName", "email"]
+    },
+    "Player": {
+      "title": "Player",
+      "description": "Cricketer profile",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["Batsman", "Bowler", "All-rounder", "Wicket-keeper"] },
+        "battingStyle": { "type": "string" },
+        "bowlingStyle": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name", "role", "createdBy"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "Cricket team",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "players": { "type": "array", "items": { "type": "string" } },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name", "createdBy"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "Cricket tournament",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "organizer": { "type": "string" },
+        "teams": { "type": "array", "items": { "type": "string" } },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name", "createdBy"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "Cricket match",
+      "type": "object",
+      "properties": {
+        "teamA": { "type": "string" },
+        "teamB": { "type": "string" },
+        "status": { "type": "string", "enum": ["upcoming", "live", "completed"] },
+        "tossWinner": { "type": "string" },
+        "tossDecision": { "type": "string", "enum": ["bat", "bowl"] },
+        "overs": { "type": "number" },
+        "scoreA": { "type": "object" },
+        "scoreB": { "type": "object" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["teamA", "teamB", "status", "createdBy"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile"
+    },
+    "/players/{playerId}": {
+      "schema": "Player",
+      "description": "Player profile"
+    },
+    "/teams/{teamId}": {
+      "schema": "Team",
+      "description": "Team profile"
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Tournament profile"
+    },
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Match profile"
+    },
+    "/matches/{matchId}/balls/{ballId}": {
+      "schema": "object",
+      "description": "Ball by ball data"
+    }
+  }
+}
