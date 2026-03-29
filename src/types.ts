@@ -2,6 +2,7 @@ export interface UserProfile {
   uid: string;
   displayName: string;
   email: string;
+  phoneNumber?: string;
   photoURL?: string;
   role: 'user' | 'admin';
 }
@@ -9,10 +10,25 @@ export interface UserProfile {
 export interface Player {
   id: string;
   name: string;
+  email?: string; // Link to user account
+  phoneNumber?: string; // Unique identifier for linking
   role: 'Batsman' | 'Bowler' | 'All-rounder' | 'Wicket-keeper';
   battingStyle?: string;
   bowlingStyle?: string;
   createdBy: string;
+  stats?: {
+    matches: number;
+    runs: number;
+    wickets: number;
+    highestScore: number;
+    bestBowling: string;
+    average: number;
+    strikeRate: number;
+    fours: number;
+    sixes: number;
+    fifties?: number;
+    centuries?: number;
+  };
 }
 
 export interface Team {
@@ -65,6 +81,15 @@ export interface Match {
   nonStriker?: string; // Player ID
   bowler?: string; // Player ID
   playerStats?: Record<string, PlayerMatchStats>; // Map of Player ID to stats
+  fallOfWickets?: {
+    player: string;
+    type: string;
+    bowler: string;
+    fielder?: string;
+    score: number;
+    balls: number;
+    innings: number;
+  }[];
   createdBy: string;
   createdAt: any;
 }

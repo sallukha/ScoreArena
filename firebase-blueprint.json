@@ -66,6 +66,21 @@
         "createdBy": { "type": "string" }
       },
       "required": ["teamA", "teamB", "status", "createdBy"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["match_start", "wicket", "milestone", "match_end", "system"] },
+        "read": { "type": "boolean" },
+        "matchId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "type", "read", "timestamp"]
     }
   },
   "firestore": {
@@ -92,6 +107,10 @@
     "/matches/{matchId}/balls/{ballId}": {
       "schema": "object",
       "description": "Ball by ball data"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notifications"
     }
   }
 }

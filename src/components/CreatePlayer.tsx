@@ -5,6 +5,8 @@ import { Player } from '../types';
 
 export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [role, setRole] = useState<Player['role']>('Batsman');
   const [battingStyle, setBattingStyle] = useState('Right Hand Bat');
   const [bowlingStyle, setBowlingStyle] = useState('Right Arm Fast');
@@ -18,6 +20,8 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
     try {
       await addDoc(collection(db, 'players'), {
         name,
+        email: email || null,
+        phoneNumber: phoneNumber || null,
         role,
         battingStyle,
         bowlingStyle,
@@ -55,6 +59,36 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
               required
             />
           </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Phone Number (Recommended)</label>
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              type="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="Enter phone number"
+              className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-medium"
+            />
+          </div>
+          <p className="text-[10px] text-gray-400 italic">Linking phone number allows the player to see their matches and stats on their phone.</p>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Player Email (Optional)</label>
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter player email"
+              className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-medium"
+            />
+          </div>
+          <p className="text-[10px] text-gray-400 italic">Linking email allows the player to see their matches on their phone.</p>
         </div>
 
         <div className="flex flex-col gap-2">

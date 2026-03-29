@@ -188,8 +188,8 @@ export const StartMatch = ({ onBack, onStart }: { onBack: () => void, onStart: (
           </label>
           <div className="flex flex-col gap-2">
             <p className="text-sm font-bold text-gray-700">Total Overs</p>
-            <div className="grid grid-cols-4 gap-3">
-              {[5, 10, 20, 50].map(o => (
+            <div className="grid grid-cols-3 gap-3">
+              {[5, 6, 8, 10, 20, 50].map(o => (
                 <button
                   key={o}
                   type="button"

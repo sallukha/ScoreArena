@@ -9,6 +9,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [isSearchingGlobal, setIsSearchingGlobal] = useState(false);
 
   useEffect(() => {
     const fetchPlayers = async () => {
@@ -19,6 +20,27 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
     };
     fetchPlayers();
   }, []);
+
+  const handleGlobalSearch = async () => {
+    if (!search || search.length < 10) return;
+    setIsSearchingGlobal(true);
+    try {
+      const q = query(collection(db, 'players'), where('phoneNumber', '==', search));
+      const snapshot = await getDocs(q);
+      const globalPlayers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+      
+      // Merge with existing players, avoiding duplicates
+      setAllPlayers(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const newPlayers = globalPlayers.filter(p => !existingIds.has(p.id));
+        return [...prev, ...newPlayers];
+      });
+    } catch (error) {
+      console.error('Error searching global players:', error);
+    } finally {
+      setIsSearchingGlobal(false);
+    }
+  };
 
   const togglePlayer = (id: string) => {
     setSelectedPlayers(prev => 
@@ -79,15 +101,25 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
             <button type="button" className="text-yellow-600 text-xs font-bold uppercase tracking-tight">+ New Player</button>
           </div>
           
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search players..."
-              className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all text-sm font-medium"
-            />
+          <div className="relative flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or phone..."
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all text-sm font-medium"
+              />
+            </div>
+            <button 
+              type="button"
+              onClick={handleGlobalSearch}
+              disabled={isSearchingGlobal || search.length < 10}
+              className="bg-black text-white px-4 rounded-xl text-xs font-bold uppercase tracking-widest disabled:opacity-50"
+            >
+              {isSearchingGlobal ? '...' : 'Find'}
+            </button>
           </div>
 
           <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
@@ -101,12 +133,17 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center font-bold text-gray-400">
+                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center font-bold text-gray-400 overflow-hidden">
                     {player.name[0]}
                   </div>
                   <div className="text-left">
                     <p className="font-bold text-gray-800 text-sm">{player.name}</p>
-                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{player.role}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{player.role}</p>
+                      {player.phoneNumber && (
+                        <p className="text-[10px] text-gray-400 font-medium tracking-tighter">{player.phoneNumber}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {selectedPlayers.includes(player.id) && <CheckCircle2 size={20} className="text-yellow-600" />}

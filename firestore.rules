@@ -21,6 +21,9 @@ service cloud.firestore {
     // Collection: matches
     // Fields: teamA, teamB, status, tossWinner, tossDecision, overs, scoreA, scoreB, createdBy
     //
+    // Collection: notifications
+    // Fields: userId, title, message, type, read, matchId, timestamp
+    //
     // ===============================================================
 
     // ===============================================================
@@ -32,6 +35,12 @@ service cloud.firestore {
 
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "sallukhan54154@gmail.com" && request.auth.token.email_verified == true));
     }
 
     function isDocOwner() {
@@ -68,7 +77,20 @@ service cloud.firestore {
       return data.keys().hasAll(['teamA', 'teamB', 'status', 'createdBy']) &&
              data.teamA is string && data.teamB is string &&
              data.status in ['upcoming', 'live', 'completed'] &&
-             data.createdBy == request.auth.uid;
+             (data.createdBy == request.auth.uid || isAdmin());
+    }
+
+    function isValidBall(data) {
+      return data.keys().hasAll(['innings', 'over', 'ball', 'runs', 'timestamp']) &&
+             data.innings is number && data.over is number && data.ball is number &&
+             data.runs is number && data.timestamp is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'title', 'message', 'type', 'read', 'timestamp']) &&
+             data.userId is string && data.title is string && data.message is string &&
+             data.type in ['match_start', 'wicket', 'milestone', 'match_end', 'system'] &&
+             data.read is bool && data.timestamp is timestamp;
     }
 
     // ===============================================================
@@ -76,42 +98,53 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);
     }
 
     match /players/{playerId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated() && isValidPlayer(request.resource.data);
-      allow update: if isDocOwner() && isValidPlayer(request.resource.data);
-      allow delete: if isDocOwner();
+      allow update: if (isDocOwner() || isAdmin()) && isValidPlayer(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     match /teams/{teamId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated() && isValidTeam(request.resource.data);
-      allow update: if isDocOwner() && isValidTeam(request.resource.data);
-      allow delete: if isDocOwner();
+      allow update: if (isDocOwner() || isAdmin()) && isValidTeam(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     match /tournaments/{tournamentId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated() && isValidTournament(request.resource.data);
-      allow update: if isDocOwner() && isValidTournament(request.resource.data);
-      allow delete: if isDocOwner();
+      allow update: if (isDocOwner() || isAdmin()) && isValidTournament(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     match /matches/{matchId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated() && isValidMatch(request.resource.data);
-      allow update: if isDocOwner() && isValidMatch(request.resource.data);
-      allow delete: if isDocOwner();
+      allow update: if (isDocOwner() || isAdmin()) && isValidMatch(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
 
       match /balls/{ballId} {
-        allow read: if isAuthenticated();
-        allow write: if isAuthenticated(); // Simplified for now, should ideally check match ownership
+        allow read: if true;
+        allow create: if isAuthenticated() && isValidBall(request.resource.data) && 
+                      get(/databases/$(database)/documents/matches/$(matchId)).data.createdBy == request.auth.uid;
+        allow update, delete: if isAuthenticated() && 
+                               get(/databases/$(database)/documents/matches/$(matchId)).data.createdBy == request.auth.uid;
       }
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow create: if isAuthenticated(); // Allow any authenticated user to create a notification (e.g. for another user)
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId && 
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
     }
   }
 }

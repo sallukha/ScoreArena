@@ -1,5 +1,9 @@
 {
   "name": "Score Wala",
   "description": "Score Wala - A live cricket scoring app with Razorpay payment integration.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
 }
