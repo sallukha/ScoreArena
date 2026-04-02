@@ -10,8 +10,6 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
-  const [devOtp, setDevOtp] = useState('');
-  const [otpMessage, setOtpMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,14 +45,6 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
       const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+91${phoneNumber}`;
       const confirmation = await signInWithPhoneNumber(auth, formattedPhone, window.recaptchaVerifier);
       setConfirmationResult(confirmation);
-      setDevOtp(confirmation.devOtp || '');
-      setOtpMessage(
-        confirmation.smsSent
-          ? 'OTP has been sent to your mobile number.'
-          : confirmation.devOtp
-            ? 'SMS provider not configured. Use the OTP shown below for now.'
-            : 'OTP request created. Please check your phone.'
-      );
       setStep('otp');
     } catch (err: any) {
       setError(err.message || 'Failed to send OTP');
@@ -182,8 +172,7 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
                 <div className="flex flex-col gap-4">
                   <div className="text-center mb-2">
                     <p className="text-sm text-gray-500">OTP sent to <span className="font-bold text-black">+91 {phoneNumber}</span></p>
-                    {otpMessage && <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-2">{otpMessage}</p>}
-                    {devOtp && <p className="text-[10px] text-yellow-600 font-bold uppercase tracking-widest mt-2">Demo OTP: {devOtp}</p>}
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-2">Firebase verification in progress</p>
                     <button onClick={() => setStep('phone')} className="text-yellow-600 text-xs font-bold uppercase mt-1">Change Number</button>
                   </div>
                   <input

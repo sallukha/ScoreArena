@@ -1,4 +1,11 @@
 import { io, type Socket } from 'socket.io-client';
+import { getApp, getApps, initializeApp } from 'firebase/app';
+import {
+  getAuth as getFirebaseAuth,
+  RecaptchaVerifier as FirebaseRecaptchaVerifier,
+  signInWithPhoneNumber as firebaseSignInWithPhoneNumber,
+  signOut as firebaseSignOut,
+} from 'firebase/auth';
 
 type Constraint =
   | { type: 'where'; field: string; op: string; value: any }
@@ -50,6 +57,20 @@ declare global {
     google?: any;
   }
 }
+
+const firebaseConfig = {
+  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyD6V0Zyu_-V0jKryRLUa_w9NsynsUHZtCg',
+  authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || 'hack-485909.firebaseapp.com',
+  projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'hack-485909',
+  storageBucket:
+    (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || 'hack-485909.firebasestorage.app',
+  messagingSenderId:
+    (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '826427159690',
+  appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:826427159690:web:8f3782323edc1783bb6973',
+};
+
+const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const firebaseAuth = getFirebaseAuth(firebaseApp);
 
 function resolveApiBase() {
   const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
@@ -424,11 +445,29 @@ async function signInWithGoogleOAuth() {
   return { user: authStore.currentUser };
 }
 
+async function exchangeFirebaseSession(firebaseUser: any) {
+  const idToken = await firebaseUser.getIdToken();
+  const result = await apiFetch<{ user: AuthUser; token: string }>('/auth/firebase', {
+    method: 'POST',
+    body: JSON.stringify({
+      idToken,
+      displayName: firebaseUser.displayName || '',
+      email: firebaseUser.email || '',
+      phoneNumber: firebaseUser.phoneNumber || '',
+      photoURL: firebaseUser.photoURL || '',
+    }),
+  });
+
+  setCurrentUser(result.user, result.token);
+  return { user: authStore.currentUser };
+}
+
 export const signIn = async () => {
   return signInWithGoogleOAuth();
 };
 
 export const logOut = async () => {
+  await firebaseSignOut(firebaseAuth).catch(() => undefined);
   setCurrentUser(null);
 };
 
@@ -439,7 +478,9 @@ export const onAuthStateChanged = (_auth: typeof auth, callback: (user: AuthUser
 };
 
 export class RecaptchaVerifier {
-  constructor(_authInstance: typeof auth, _container: string, _options?: any) {}
+  constructor(_authInstance: typeof auth, container: string, options?: any) {
+    return new FirebaseRecaptchaVerifier(firebaseAuth, container, options);
+  }
 }
 
 export const PhoneAuthProvider = {};
@@ -447,29 +488,14 @@ export const PhoneAuthProvider = {};
 export const signInWithPhoneNumber = async (
   _authInstance: typeof auth,
   phoneNumber: string,
-  _verifier: any
+  verifier: any
 ) => {
-  const otpSession = await apiFetch<{ sessionId: string; devOtp?: string; smsSent?: boolean; expiresInSeconds?: number }>('/auth/phone/send-otp', {
-    method: 'POST',
-    body: JSON.stringify({ phoneNumber }),
-  });
+  const confirmationResult = await firebaseSignInWithPhoneNumber(firebaseAuth, phoneNumber, verifier);
 
   return {
-    sessionId: otpSession.sessionId,
-    devOtp: otpSession.devOtp,
-    smsSent: otpSession.smsSent,
-    expiresInSeconds: otpSession.expiresInSeconds,
     confirm: async (otp: string) => {
-      const result = await apiFetch<{ user: AuthUser; token: string }>('/auth/phone/verify-otp', {
-        method: 'POST',
-        body: JSON.stringify({
-          sessionId: otpSession.sessionId,
-          otp,
-        }),
-      });
-
-      setCurrentUser(result.user, result.token);
-      return { user: authStore.currentUser };
+      const result = await confirmationResult.confirm(otp);
+      return exchangeFirebaseSession(result.user);
     },
   };
 };

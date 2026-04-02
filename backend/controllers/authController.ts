@@ -1,11 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
-import twilio from 'twilio';
 import { UserModel } from '../models/User';
 import { createAccessToken } from '../utils/jwt';
-
-const OTP_TTL_MS = 5 * 60 * 1000;
-const otpSessions = new Map<string, { phoneNumber: string; otp: string; expiresAt: number }>();
 
 function normalizePhoneNumber(input: string) {
   const trimmed = String(input || '').trim();
@@ -26,23 +22,37 @@ function normalizePhoneNumber(input: string) {
   return trimmed;
 }
 
-async function sendOtpSms(phoneNumber: string, otp: string) {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
+function getFirebaseApiKey() {
+  return (
+    process.env.FIREBASE_API_KEY ||
+    process.env.VITE_FIREBASE_API_KEY ||
+    'AIzaSyD6V0Zyu_-V0jKryRLUa_w9NsynsUHZtCg'
+  );
+}
 
-  if (!accountSid || !authToken || !fromPhoneNumber) {
-    return false;
+async function lookupFirebaseUser(idToken: string) {
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(getFirebaseApiKey())}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ idToken }),
+    }
+  );
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error?.message || 'Failed to verify Firebase token');
   }
 
-  const client = twilio(accountSid, authToken);
-  await client.messages.create({
-    to: phoneNumber,
-    from: fromPhoneNumber,
-    body: `Your Score Wala OTP is ${otp}. It will expire in 5 minutes.`,
-  });
+  const user = Array.isArray(payload?.users) ? payload.users[0] : null;
+  if (!user?.localId) {
+    throw new Error('Firebase user was not found');
+  }
 
-  return true;
+  return user;
 }
 
 function sanitizeUser(doc: any) {
@@ -117,56 +127,26 @@ export async function googleLogin(req: Request, res: Response) {
   });
 }
 
-export async function sendPhoneOtp(req: Request, res: Response) {
-  const phoneNumber = normalizePhoneNumber(req.body?.phoneNumber);
+export async function firebaseLogin(req: Request, res: Response) {
+  const idToken = String(req.body?.idToken || '').trim();
+  if (!idToken) {
+    return res.status(400).json({ error: 'Firebase ID token is required' });
+  }
+
+  let firebaseUser: any;
+  try {
+    firebaseUser = await lookupFirebaseUser(idToken);
+  } catch (error) {
+    return res.status(401).json({
+      error: error instanceof Error ? error.message : 'Failed to verify Firebase token',
+    });
+  }
+
+  const phoneNumber = normalizePhoneNumber(req.body?.phoneNumber || firebaseUser.phoneNumber || '');
   if (!phoneNumber) {
-    return res.status(400).json({ error: 'Phone number is required' });
+    return res.status(400).json({ error: 'Firebase phone number is missing' });
   }
 
-  if (phoneNumber.replace(/\D/g, '').length < 10) {
-    return res.status(400).json({ error: 'Please enter a valid phone number' });
-  }
-
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
-  const sessionId = randomUUID();
-  otpSessions.set(sessionId, {
-    phoneNumber,
-    otp,
-    expiresAt: Date.now() + OTP_TTL_MS,
-  });
-
-  const smsSent = await sendOtpSms(phoneNumber, otp).catch((error) => {
-    console.error('OTP SMS sending failed:', error);
-    return false;
-  });
-
-  return res.json({
-    sessionId,
-    success: true,
-    smsSent,
-    expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
-    devOtp: process.env.NODE_ENV === 'production' ? undefined : otp,
-  });
-}
-
-export async function verifyPhoneOtp(req: Request, res: Response) {
-  const { sessionId, otp } = req.body || {};
-  const session = otpSessions.get(String(sessionId || ''));
-
-  if (!session) {
-    return res.status(400).json({ error: 'OTP session expired' });
-  }
-
-  if (Date.now() > session.expiresAt) {
-    otpSessions.delete(String(sessionId));
-    return res.status(400).json({ error: 'OTP expired' });
-  }
-
-  if (String(otp || '') !== session.otp) {
-    return res.status(400).json({ error: 'Invalid OTP' });
-  }
-
-  const phoneNumber = normalizePhoneNumber(session.phoneNumber);
   const uid = `phone_${phoneNumber.replace(/[^0-9]/g, '')}`;
 
   const user = await (UserModel as any).findByIdAndUpdate(
@@ -174,16 +154,16 @@ export async function verifyPhoneOtp(req: Request, res: Response) {
     {
       _id: uid,
       uid,
-      displayName: `User_${phoneNumber.slice(-4)}`,
-      email: '',
+      displayName:
+        String(req.body?.displayName || firebaseUser.displayName || '').trim() || `User_${phoneNumber.slice(-4)}`,
+      email: String(req.body?.email || firebaseUser.email || '').trim().toLowerCase(),
       phoneNumber,
-      photoURL: '',
+      photoURL: String(req.body?.photoURL || firebaseUser.photoUrl || '').trim(),
       authProvider: 'phone',
       role: 'user',
     },
     { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
   );
 
-  otpSessions.delete(String(sessionId));
   return res.json(buildAuthResponse(user));
 }

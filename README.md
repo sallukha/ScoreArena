@@ -1,13 +1,13 @@
 # Score Wala
 
-This app now uses a custom `Express + Node.js + MongoDB` backend instead of Firebase while keeping the existing frontend UI flow intact.
+This app uses a custom `Express + Node.js + MongoDB` backend while keeping Firebase Authentication for phone OTP login.
 
 ## Stack
 
 - Frontend: React + Vite
 - Backend: Express
 - Database: MongoDB + Mongoose
-- Compatibility layer: `src/firebase.ts` now talks to REST APIs so the current frontend keeps working with minimal UI changes
+- Compatibility layer: `src/firebase.ts` talks to REST APIs for app data while still using Firebase Auth for phone verification
 - Process scaling: PM2 cluster mode via `ecosystem.config.cjs`
 
 ## Run Locally
@@ -53,9 +53,8 @@ Recommended for 1000+ active users:
 
 ## Notes
 
-- Phone login uses a development OTP flow right now. Use `123456`.
 - Google login/signup now supports real Google OAuth when `VITE_GOOGLE_CLIENT_ID` is configured.
-- Phone login uses backend OTP sessions with optional Twilio SMS delivery.
-- If Twilio env vars are missing, OTP still works in development and is shown on screen for testing.
+- Phone login uses Firebase phone authentication with reCAPTCHA and exchanges the Firebase ID token for the app's backend JWT.
+- Set the `VITE_FIREBASE_*` values in `.env` if you want to override the bundled Firebase project config.
 - If you see `Failed to fetch` in the browser console, the backend is not reachable from the frontend origin. Check that the dev server is running and `VITE_API_BASE_URL` points to the backend.
 - Polling now uses backoff and hidden-tab slowdown to reduce backend load under heavy traffic.
