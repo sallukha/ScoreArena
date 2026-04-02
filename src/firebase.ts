@@ -59,14 +59,15 @@ declare global {
 }
 
 const firebaseConfig = {
-  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyD6V0Zyu_-V0jKryRLUa_w9NsynsUHZtCg',
-  authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || 'hack-485909.firebaseapp.com',
-  projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'hack-485909',
+  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyA2sBh5eTwaAHkKhxbDynOEEcJPxi6Iz0w',
+  authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || 'fir-ath-d32b0.firebaseapp.com',
+  projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'fir-ath-d32b0',
   storageBucket:
-    (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || 'hack-485909.firebasestorage.app',
+    (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || 'fir-ath-d32b0.firebasestorage.app',
   messagingSenderId:
-    (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '826427159690',
-  appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:826427159690:web:8f3782323edc1783bb6973',
+    (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '838787006701',
+  appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:838787006701:web:6e3299c2bef3c4ab280ce4',
+  measurementId: (import.meta as any).env?.VITE_FIREBASE_MEASUREMENT_ID || 'G-55JTD1M2QK',
 };
 
 const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
@@ -117,6 +118,12 @@ function joinPath(parts: string[]) {
   return parts.filter(Boolean).join('/');
 }
 
+function clearStoredAuth() {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  authStore.currentUser = null;
+}
+
 async function apiFetch<T>(input: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
   const response = await fetch(`${API_BASE}${input}`, {
@@ -132,9 +139,7 @@ async function apiFetch<T>(input: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const text = await response.text();
     if (response.status === 401) {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-      authStore.currentUser = null;
+      clearStoredAuth();
       emitAuthChange();
     }
     throw new Error(`HTTP ${response.status}: ${text || 'Request failed'}`);
@@ -207,6 +212,10 @@ let socketSubscriptions = new Map<
 
 function getAuthToken() {
   return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
+function hasAuthSession() {
+  return !!getAuthToken();
 }
 
 function getComparablePayload(ref: DocumentRef | QueryRef | CollectionRef, snapshot: any) {
@@ -351,17 +360,20 @@ function setCurrentUser(user: any, token?: string) {
 }
 
 const storedUser = localStorage.getItem(AUTH_STORAGE_KEY);
-if (storedUser) {
+const storedToken = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+if (storedUser && storedToken) {
   try {
     authStore.currentUser = normalizeUser(JSON.parse(storedUser));
   } catch {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+    clearStoredAuth();
   }
+} else if (storedUser || storedToken) {
+  clearStoredAuth();
 }
 
 export const auth = {
   get currentUser() {
-    return authStore.currentUser;
+    return hasAuthSession() ? authStore.currentUser : null;
   },
 };
 
@@ -473,7 +485,7 @@ export const logOut = async () => {
 
 export const onAuthStateChanged = (_auth: typeof auth, callback: (user: AuthUser | null) => void) => {
   authStore.listeners.add(callback);
-  callback(authStore.currentUser);
+  callback(hasAuthSession() ? authStore.currentUser : null);
   return () => authStore.listeners.delete(callback);
 };
 

@@ -1616,6 +1616,15 @@ const MainContent = () => {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   useEffect(() => {
+    if (!user) {
+      setMatches([]);
+      setRecentMatches([]);
+      setGlobalMatches([]);
+      setTournaments([]);
+      setTeams({});
+      return;
+    }
+
     async function fetchTeamNames(m: any) {
       if (!teams[m.teamA]) {
         const tA = await getDoc(doc(db, 'teams', m.teamA));
@@ -1644,12 +1653,6 @@ const MainContent = () => {
       handleFirestoreError(error, OperationType.GET, 'tournaments');
     });
 
-    if (!user) {
-      return () => {
-        unsubGlobal();
-        unsubTournaments();
-      };
-    }
     console.log('MainContent: Initializing match listeners...');
     
     // Matches created by user

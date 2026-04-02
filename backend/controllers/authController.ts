@@ -26,7 +26,7 @@ function getFirebaseApiKey() {
   return (
     process.env.FIREBASE_API_KEY ||
     process.env.VITE_FIREBASE_API_KEY ||
-    'AIzaSyD6V0Zyu_-V0jKryRLUa_w9NsynsUHZtCg'
+    'AIzaSyA2sBh5eTwaAHkKhxbDynOEEcJPxi6Iz0w'
   );
 }
 

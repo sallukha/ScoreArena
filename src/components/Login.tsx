@@ -4,6 +4,73 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Phone, Mail, ArrowRight, CheckCircle2, Trophy, ShieldCheck } from 'lucide-react';
 import { UserProfile } from '../types';
 
+async function waitForRecaptchaContainer(attempts = 10) {
+  for (let index = 0; index < attempts; index += 1) {
+    const container = document.getElementById('recaptcha-container');
+    if (container) {
+      return container;
+    }
+
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  }
+
+  return null;
+}
+
+function resetRecaptchaVerifier() {
+  if (window.recaptchaVerifier?.clear) {
+    window.recaptchaVerifier.clear();
+  }
+  window.recaptchaVerifier = null;
+}
+
+async function ensureRecaptchaVerifier() {
+  const container = await waitForRecaptchaContainer();
+  if (!container) {
+    throw new Error('reCAPTCHA load nahi hua. Page refresh karke dobara try karo.');
+  }
+
+  if (!window.recaptchaVerifier) {
+    window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+      size: 'normal',
+      callback: () => {
+        console.log('Recaptcha verified');
+      },
+    });
+  }
+
+  return window.recaptchaVerifier;
+}
+
+function getFirebaseAuthMessage(err: any) {
+  const code = String(err?.code || err?.customData?._tokenResponse?.error?.message || '');
+  const rawMessage = String(
+    err?.customData?._tokenResponse?.error?.message ||
+      err?.customData?.serverResponse?.error?.message ||
+      err?.message ||
+      ''
+  );
+
+  switch (code) {
+    case 'auth/operation-not-allowed':
+      return 'Firebase Console mein Phone sign-in enable karo.';
+    case 'auth/invalid-app-credential':
+      return 'reCAPTCHA verify nahi ho pa raha. Authorized domains aur Phone Auth settings check karo.';
+    case 'auth/captcha-check-failed':
+      return 'reCAPTCHA failed hua. Page refresh karke dobara try karo.';
+    case 'auth/invalid-phone-number':
+      return 'Phone number invalid hai. Sahi 10-digit mobile number dalo.';
+    case 'auth/too-many-requests':
+      return 'Bahut zyada attempts ho gaye. Thodi der baad try karo.';
+    case 'auth/quota-exceeded':
+      return 'Firebase SMS quota exceed ho gaya hai.';
+    default:
+      return rawMessage ? `OTP error: ${rawMessage}` : 'OTP send karne mein problem aa rahi hai.';
+  }
+}
+
 export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
   const [method, setMethod] = useState<'google' | 'phone'>('google');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -12,17 +79,6 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
   const [confirmationResult, setConfirmationResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (method === 'phone' && !window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
-        callback: () => {
-          console.log('Recaptcha verified');
-        }
-      });
-    }
-  }, [method]);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -43,11 +99,12 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
     setError(null);
     try {
       const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+91${phoneNumber}`;
-      const confirmation = await signInWithPhoneNumber(auth, formattedPhone, window.recaptchaVerifier);
+      const verifier = await ensureRecaptchaVerifier();
+      const confirmation = await signInWithPhoneNumber(auth, formattedPhone, verifier);
       setConfirmationResult(confirmation);
       setStep('otp');
     } catch (err: any) {
-      setError(err.message || 'Failed to send OTP');
+      setError(getFirebaseAuthMessage(err));
     } finally {
       setLoading(false);
     }
@@ -76,7 +133,7 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
       }
       onLoginSuccess();
     } catch (err: any) {
-      setError('Invalid OTP. Please try again.');
+      setError(getFirebaseAuthMessage(err) || 'Invalid OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -202,13 +259,19 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
           )}
         </AnimatePresence>
 
+        <div
+          className={`rounded-2xl border border-gray-200 bg-gray-50 p-3 transition-all ${
+            method === 'phone' ? 'block' : 'hidden'
+          }`}
+        >
+          <div id="recaptcha-container" className="min-h-[78px] overflow-hidden"></div>
+        </div>
+
         {error && (
           <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold text-center border border-red-100">
             {error}
           </div>
         )}
-
-        <div id="recaptcha-container"></div>
 
         <div className="flex items-center gap-2 justify-center text-gray-400 mt-4">
           <ShieldCheck size={14} />
