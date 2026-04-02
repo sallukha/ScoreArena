@@ -19,8 +19,9 @@ import { Leaderboard } from './components/Leaderboard';
 import { PlayerDetails } from './components/PlayerDetails';
 import { NotificationList } from './components/NotificationList';
 import { TeamDetails } from './components/TeamDetails';
+import { TournamentDetails } from './components/TournamentDetails';
 
-type ViewState = 'main' | 'create-team' | 'create-player' | 'start-match' | 'scorer' | 'create-tournament' | 'about' | 'help' | 'settings' | 'history' | 'matchDetails' | 'explore' | 'search' | 'leaderboard' | 'playerDetails' | 'teamDetails';
+type ViewState = 'main' | 'create-team' | 'create-player' | 'start-match' | 'scorer' | 'create-tournament' | 'about' | 'help' | 'settings' | 'history' | 'matchDetails' | 'explore' | 'search' | 'leaderboard' | 'playerDetails' | 'teamDetails' | 'tournamentDetails';
 
 // --- Contexts ---
 const AuthContext = createContext<{
@@ -38,6 +39,42 @@ const AuthContext = createContext<{
 });
 
 const useAuth = () => useContext(AuthContext);
+
+const THEME_STORAGE_KEY = 'scorewala-theme';
+const MAX_PROFILE_IMAGE_DIMENSION = 512;
+const PROFILE_IMAGE_QUALITY = 0.82;
+
+async function fileToDataUrl(file: File) {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function optimizeProfileImage(file: File) {
+  const rawDataUrl = await fileToDataUrl(file);
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Selected image could not be loaded'));
+    img.src = rawDataUrl;
+  });
+
+  const canvas = document.createElement('canvas');
+  const scale = Math.min(1, MAX_PROFILE_IMAGE_DIMENSION / Math.max(image.width, image.height));
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Image processing is not supported in this browser');
+  }
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', PROFILE_IMAGE_QUALITY);
+}
 
 // --- Components ---
 
@@ -389,7 +426,9 @@ const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () => void
                               <div className="flex flex-col">
                                 <span className="truncate max-w-[100px] font-black text-gray-900">{playerNames[id] || `Player ${id.slice(0, 4)}`}{isCurrentlyBatting ? '*' : ''}</span>
                                 <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">
-                                  {isOut ? `${isOut.type} b ${playerNames[isOut.bowler] || 'Bowler'}` : (isCurrentlyBatting ? 'Batting' : (s.balls > 0 ? 'Not Out' : 'Yet to bat'))}
+                                  {isOut
+                                    ? `${isOut.type} b ${playerNames[isOut.bowler] || 'Bowler'} • ${s.runs} (${s.balls})`
+                                    : (isCurrentlyBatting ? 'Batting' : (s.balls > 0 ? 'Not Out' : 'Yet to bat'))}
                                 </span>
                               </div>
                             </td>
@@ -411,7 +450,11 @@ const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () => void
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Fall of Wickets</h4>
                     <p className="text-[10px] text-gray-600 font-medium leading-relaxed">
                       {match.fallOfWickets.filter((f: any) => f.innings === 1).map((f: any, i: number) => (
-                        <span key={i}>{f.score}-{i+1} ({playerNames[f.player] || 'Player'}, {Math.floor(f.balls/6)}.{f.balls%6} ov){i < match.fallOfWickets.filter((f: any) => f.innings === 1).length - 1 ? ', ' : ''}</span>
+                        <span key={i}>
+                          {f.score}-{i+1} ({playerNames[f.player] || 'Player'} {match.playerStats?.[f.player]?.runs || 0}
+                          /{match.playerStats?.[f.player]?.balls || 0}, {Math.floor(f.balls/6)}.{f.balls%6} ov)
+                          {i < match.fallOfWickets.filter((f: any) => f.innings === 1).length - 1 ? ', ' : ''}
+                        </span>
                       ))}
                     </p>
                   </div>
@@ -448,7 +491,9 @@ const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () => void
                               <div className="flex flex-col">
                                 <span className="truncate max-w-[100px] font-black text-gray-900">{playerNames[id] || `Player ${id.slice(0, 4)}`}{isCurrentlyBatting ? '*' : ''}</span>
                                 <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">
-                                  {isOut ? `${isOut.type} b ${playerNames[isOut.bowler] || 'Bowler'}` : (isCurrentlyBatting ? 'Batting' : (s.balls > 0 ? 'Not Out' : 'Yet to bat'))}
+                                  {isOut
+                                    ? `${isOut.type} b ${playerNames[isOut.bowler] || 'Bowler'} • ${s.runs} (${s.balls})`
+                                    : (isCurrentlyBatting ? 'Batting' : (s.balls > 0 ? 'Not Out' : 'Yet to bat'))}
                                 </span>
                               </div>
                             </td>
@@ -470,7 +515,11 @@ const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () => void
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Fall of Wickets</h4>
                     <p className="text-[10px] text-gray-600 font-medium leading-relaxed">
                       {match.fallOfWickets.filter((f: any) => f.innings === 2).map((f: any, i: number) => (
-                        <span key={i}>{f.score}-{i+1} ({playerNames[f.player] || 'Player'}, {Math.floor(f.balls/6)}.{f.balls%6} ov){i < match.fallOfWickets.filter((f: any) => f.innings === 2).length - 1 ? ', ' : ''}</span>
+                        <span key={i}>
+                          {f.score}-{i+1} ({playerNames[f.player] || 'Player'} {match.playerStats?.[f.player]?.runs || 0}
+                          /{match.playerStats?.[f.player]?.balls || 0}, {Math.floor(f.balls/6)}.{f.balls%6} ov)
+                          {i < match.fallOfWickets.filter((f: any) => f.innings === 2).length - 1 ? ', ' : ''}
+                        </span>
                       ))}
                     </p>
                   </div>
@@ -543,10 +592,14 @@ const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams: Recor
     }
   };
 
+  const currentInnings = match.currentInnings === 2 ? 2 : 1;
+  const inningWickets = (match.fallOfWickets || []).filter((w: any) => w.innings === currentInnings);
+  const recentDismissals = inningWickets.slice(-3);
+
   return (
     <div 
       onClick={() => onClick(match.id)}
-      className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden active:scale-[0.98] transition-transform cursor-pointer hover:shadow-md"
+      className="bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden active:scale-[0.98] transition-transform cursor-pointer hover:shadow-md"
     >
       <div className="flex justify-between items-center p-4 pb-0">
         <div className="flex items-center gap-2">
@@ -570,39 +623,39 @@ const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams: Recor
         </button>
       </div>
 
-      <div className="p-6 flex flex-col gap-6">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center border border-gray-100">
-              <span className="text-lg font-black text-gray-400">{teamA.name[0]}</span>
+      <div className="p-4 sm:p-6 flex flex-col gap-5 sm:gap-6">
+        <div className="flex justify-between items-start gap-3">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 bg-gray-50 rounded-2xl flex items-center justify-center border border-gray-100 shrink-0">
+              <span className="text-base sm:text-lg font-black text-gray-400">{teamA.name[0]}</span>
             </div>
-            <div>
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">{teamA.name}</h3>
+            <div className="min-w-0">
+              <h3 className="truncate text-xs sm:text-sm font-black text-gray-900 uppercase tracking-tight">{teamA.name}</h3>
               <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
                 {match.currentInnings === 1 ? 'Batting' : 'Bowling'}
               </p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-black text-gray-900">{match.scoreA.runs}/{match.scoreA.wickets}</p>
+          <div className="text-right shrink-0">
+            <p className="text-xl sm:text-2xl font-black text-gray-900">{match.scoreA.runs}/{match.scoreA.wickets}</p>
             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{match.scoreA.overs}.{match.scoreA.balls} Ov</p>
           </div>
         </div>
 
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center border border-gray-100">
-              <span className="text-lg font-black text-gray-400">{teamB.name[0]}</span>
+        <div className="flex justify-between items-start gap-3">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 bg-gray-50 rounded-2xl flex items-center justify-center border border-gray-100 shrink-0">
+              <span className="text-base sm:text-lg font-black text-gray-400">{teamB.name[0]}</span>
             </div>
-            <div>
-              <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">{teamB.name}</h3>
+            <div className="min-w-0">
+              <h3 className="truncate text-xs sm:text-sm font-black text-gray-900 uppercase tracking-tight">{teamB.name}</h3>
               <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
                 {match.currentInnings === 2 ? 'Batting' : (match.currentInnings === 1 ? 'Yet to bat' : 'Bowling')}
               </p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-black text-gray-900">
+          <div className="text-right shrink-0">
+            <p className="text-xl sm:text-2xl font-black text-gray-900">
               {match.currentInnings === 2 || !isLive ? `${match.scoreB.runs}/${match.scoreB.wickets}` : '0/0'}
             </p>
             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
@@ -612,7 +665,7 @@ const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams: Recor
         </div>
 
         {isLive && (
-          <div className="mt-2 pt-6 border-t border-gray-50">
+          <div className="mt-1 pt-5 sm:pt-6 border-t border-gray-50">
             <table className="w-full text-left text-[10px]">
               <thead className="text-gray-400 font-black uppercase tracking-widest">
                 <tr>
@@ -686,6 +739,35 @@ const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams: Recor
                 </div>
               </div>
             )}
+
+            {recentDismissals.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-50">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">Wicket History</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-red-500">{inningWickets.length} Down</span>
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  {recentDismissals.map((wicket: any, index: number) => (
+                    <div key={`${wicket.player}-${index}`} className="rounded-2xl bg-red-50 border border-red-100 px-3 py-2 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-red-600 truncate">
+                          {wicket.score}-{inningWickets.findIndex((item: any) => item === wicket) + 1}
+                        </p>
+                        <p className="text-xs font-bold text-gray-800 truncate">
+                          {wicket.playerName || wicket.player || 'Batter Out'}
+                        </p>
+                        <p className="text-[10px] text-gray-500 font-bold truncate">
+                          {wicket.type}{wicket.bowlerName ? ` • ${wicket.bowlerName}` : ''} • {match.playerStats?.[wicket.player]?.runs || 0} ({match.playerStats?.[wicket.player]?.balls || 0})
+                        </p>
+                      </div>
+                      <div className="text-[10px] font-black text-gray-500 shrink-0">
+                        {Math.floor((wicket.balls || 0) / 6)}.{(wicket.balls || 0) % 6} ov
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -693,13 +775,92 @@ const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams: Recor
   );
 };
 
-const Home = ({ onStartMatch, onMatchClick, matches, recentMatches, globalMatches, teams, userTeamIds }: { 
+const CricketNews = () => {
+  const [articles, setArticles] = useState<any[]>([]);
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    let intervalId: number | undefined;
+
+    const loadNews = () => {
+      fetch('/api/news/cricket')
+        .then((response) => response.json())
+        .then((data) => {
+          if (!isMounted) return;
+          setEnabled(Boolean(data.enabled));
+          setArticles(Array.isArray(data.articles) ? data.articles : []);
+        })
+        .catch(() => {
+          if (!isMounted) return;
+          setEnabled(false);
+          setArticles([]);
+        });
+    };
+
+    loadNews();
+    intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadNews();
+      }
+    }, 5 * 60 * 1000);
+
+    return () => {
+      isMounted = false;
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, []);
+
+  if (!enabled || articles.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-black italic uppercase tracking-tighter text-gray-900 flex items-center gap-2">
+          <span className="w-2 h-6 bg-black rounded-full"></span>
+          CRICKET NEWS
+        </h2>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {articles.slice(0, 4).map((article) => (
+          <a
+            key={article.id}
+            href={article.url}
+            target="_blank"
+            rel="noreferrer"
+            className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden hover:border-yellow-200 transition-colors"
+          >
+            <div className="aspect-[16/9] bg-gray-100 overflow-hidden">
+              {article.imageUrl ? (
+                <img src={article.imageUrl} alt={article.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-300">
+                  <Trophy size={36} />
+                </div>
+              )}
+            </div>
+            <div className="p-5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{article.source}</p>
+              <h3 className="mt-2 text-sm font-black text-gray-900 leading-snug">{article.title}</h3>
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const Home = ({ onStartMatch, onMatchClick, matches, recentMatches, globalMatches, teams, tournaments, userTeamIds }: { 
   onStartMatch: () => void, 
   onMatchClick: (id: string) => void,
   matches: any[],
   recentMatches: any[],
   globalMatches: any[],
   teams: Record<string, any>,
+  tournaments: Tournament[],
   userTeamIds: string[]
 }) => {
   // Combine matches created by user and matches where user's team is playing
@@ -742,19 +903,19 @@ const Home = ({ onStartMatch, onMatchClick, matches, recentMatches, globalMatche
         )}
       </div>
 
-      {/* Global Live Feed */}
+      {/* Live Feed */}
       {otherLiveMatches.length > 0 && (
         <div className="flex flex-col gap-4">
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-black italic uppercase tracking-tighter text-gray-900 flex items-center gap-2">
               <span className="w-2 h-6 bg-red-600 rounded-full animate-pulse"></span>
-              Global Live Feed
+              LIVE FEED
             </h2>
           </div>
           
-          <div className="flex overflow-x-auto gap-4 pb-4 -mx-4 px-4 scrollbar-hide">
+          <div className="flex overflow-x-auto gap-4 pb-4 -mx-4 px-4 scrollbar-hide snap-x snap-mandatory">
             {otherLiveMatches.map(match => (
-              <div key={match.id} className="min-w-[300px]">
+              <div key={match.id} className="min-w-[88vw] sm:min-w-[340px] max-w-[420px] snap-start">
                 <MatchCard match={match} teams={teams} onClick={() => onMatchClick(match.id)} isLive />
               </div>
             ))}
@@ -773,28 +934,42 @@ const Home = ({ onStartMatch, onMatchClick, matches, recentMatches, globalMatche
         {recentMatches.map(match => (
           <MatchCard key={match.id} match={match} teams={teams} onClick={() => onMatchClick(match.id)} />
         ))}
-      </div>
-
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-black italic uppercase tracking-tighter text-gray-900 flex items-center gap-2">
-          <span className="w-2 h-6 bg-yellow-500 rounded-full"></span>
-          UPCOMING TOURNAMENTS
-        </h2>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        {[1, 2].map(i => (
-          <div key={i} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col gap-4 group hover:border-yellow-200 transition-colors">
-            <div className="w-full aspect-video bg-gray-50 rounded-2xl flex items-center justify-center group-hover:bg-yellow-50 transition-colors">
-              <Trophy size={40} className="text-gray-200 group-hover:text-yellow-500 transition-colors" />
-            </div>
-            <div>
-              <h3 className="font-black italic uppercase tracking-tighter text-gray-900 leading-tight">Summer Cricket League 2026</h3>
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Starts in 5 days</p>
-            </div>
+        {recentMatches.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-[2.5rem] border border-dashed border-gray-200 shadow-sm">
+            <History size={40} className="mx-auto text-gray-200 mb-4" />
+            <p className="text-gray-400 text-sm font-bold italic uppercase tracking-widest">No recent matches yet</p>
           </div>
-        ))}
+        )}
       </div>
+
+      {tournaments.length > 0 && (
+        <>
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-black italic uppercase tracking-tighter text-gray-900 flex items-center gap-2">
+              <span className="w-2 h-6 bg-yellow-500 rounded-full"></span>
+              TOURNAMENTS
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {tournaments.slice(0, 4).map((tournament) => (
+              <div key={tournament.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col gap-4">
+                <div className="w-full aspect-video bg-yellow-50 rounded-2xl flex items-center justify-center">
+                  <Trophy size={40} className="text-yellow-500" />
+                </div>
+                <div>
+                  <h3 className="font-black italic uppercase tracking-tighter text-gray-900 leading-tight">{tournament.name}</h3>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
+                    {tournament.status || 'upcoming'} • {tournament.teamCount || tournament.teams?.length || 0} teams
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <CricketNews />
 
       <motion.button
         whileHover={{ scale: 1.05, rotate: 5 }}
@@ -814,7 +989,7 @@ const Home = ({ onStartMatch, onMatchClick, matches, recentMatches, globalMatche
   );
 };
 
-const Teams = ({ onCreateTeam, onCreatePlayer, onTeamClick }: { onCreateTeam: () => void, onCreatePlayer: () => void, onTeamClick: (id: string) => void }) => {
+const Teams = ({ onCreateTeam, onCreatePlayer, onTeamClick, liveMatches }: { onCreateTeam: () => void, onCreatePlayer: () => void, onTeamClick: (id: string) => void, liveMatches: any[] }) => {
   const [teams, setTeams] = useState<any[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
   const { user } = useAuth();
@@ -847,24 +1022,34 @@ const Teams = ({ onCreateTeam, onCreatePlayer, onTeamClick }: { onCreateTeam: ()
       </div>
       
       <div className="flex flex-col gap-3">
-        {teams.map(team => (
-          <button 
-            key={team.id} 
-            onClick={() => onTeamClick(team.id)}
-            className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-yellow-200 transition-colors text-left w-full"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center font-bold text-gray-400 group-hover:bg-yellow-50 group-hover:text-yellow-600 transition-colors">
-                {team.name[0]}
+        {teams.map(team => {
+          const liveMatch = liveMatches.find((match) => match.teamA === team.id || match.teamB === team.id);
+          return (
+            <button 
+              key={team.id} 
+              onClick={() => onTeamClick(team.id)}
+              className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:border-yellow-200 transition-colors text-left w-full"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center font-bold text-gray-400 group-hover:bg-yellow-50 group-hover:text-yellow-600 transition-colors">
+                  {team.name[0]}
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-800">{team.name}</h3>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <p className="text-xs text-gray-500 font-medium">{team.players?.length || 0} Players</p>
+                    {liveMatch && (
+                      <span className="rounded-full bg-red-50 text-red-600 border border-red-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest">
+                        Live Now
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-gray-800">{team.name}</h3>
-                <p className="text-xs text-gray-500 font-medium">{team.players?.length || 0} Players</p>
-              </div>
-            </div>
-            <ChevronRight size={18} className="text-gray-300" />
-          </button>
-        ))}
+              <ChevronRight size={18} className="text-gray-300" />
+            </button>
+          );
+        })}
         {teams.length === 0 && (
           <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-gray-200">
             <Users size={48} className="mx-auto text-gray-200 mb-4" />
@@ -903,7 +1088,7 @@ const Teams = ({ onCreateTeam, onCreatePlayer, onTeamClick }: { onCreateTeam: ()
   );
 };
 
-const Tournaments = ({ onCreateTournament }: { onCreateTournament: () => void }) => {
+const Tournaments = ({ onCreateTournament, onTournamentClick }: { onCreateTournament: () => void; onTournamentClick: (id: string) => void }) => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -954,7 +1139,7 @@ const Tournaments = ({ onCreateTournament }: { onCreateTournament: () => void })
       ) : (
         <div className="grid grid-cols-1 gap-4">
           {tournaments.map(t => (
-            <div key={t.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <button key={t.id} onClick={() => onTournamentClick(t.id)} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden text-left">
               <div className="bg-gray-900 p-4 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <Trophy size={20} className="text-yellow-500" />
@@ -971,8 +1156,12 @@ const Tournaments = ({ onCreateTournament }: { onCreateTournament: () => void })
                   <span className="text-gray-400 font-bold uppercase tracking-widest">Duration</span>
                   <span className="text-gray-800 font-bold">{t.startDate} - {t.endDate}</span>
                 </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-gray-400 font-bold uppercase tracking-widest">Teams</span>
+                  <span className="text-gray-800 font-bold">{t.teamCount || t.teams?.length || 0}</span>
+                </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -985,10 +1174,13 @@ const Profile = () => {
   const [playerStats, setPlayerStats] = useState<any>(null);
   const [phoneInput, setPhoneInput] = useState('');
   const [isLinking, setIsLinking] = useState(false);
+  const [imagePreview, setImagePreview] = useState('');
+  const [isSavingImage, setIsSavingImage] = useState(false);
+  const [imageMessage, setImageMessage] = useState('');
 
   useEffect(() => {
     if (!user) return;
-    
+
     // 1. Try to find player by user's UID (created by them)
     // 2. Try to find player by user's phone number
     const qByUid = query(collection(db, 'players'), where('createdBy', '==', user.uid), limit(1));
@@ -1008,6 +1200,10 @@ const Profile = () => {
 
     return () => unsubByUid();
   }, [user]);
+
+  useEffect(() => {
+    setImagePreview(user?.photoURL || '');
+  }, [user?.photoURL]);
 
   const handleLinkPhone = async () => {
     if (!user || !phoneInput || phoneInput.length < 10) return;
@@ -1035,6 +1231,51 @@ const Profile = () => {
     }
   };
 
+  const handleProfileImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!user || !file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setImageMessage('Please choose an image file.');
+      event.target.value = '';
+      return;
+    }
+
+    setIsSavingImage(true);
+    setImageMessage('');
+    try {
+      const optimizedImage = await optimizeProfileImage(file);
+      const nextUser = { ...user, photoURL: optimizedImage };
+      await setDoc(doc(db, 'users', user.uid), nextUser);
+      setImagePreview(optimizedImage);
+      setImageMessage('Profile image updated.');
+    } catch (error) {
+      console.error('Error saving profile image:', error);
+      setImageMessage('Profile image save nahi ho paayi. Dusri image try karo.');
+    } finally {
+      setIsSavingImage(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleRemoveProfileImage = async () => {
+    if (!user) return;
+
+    setIsSavingImage(true);
+    setImageMessage('');
+    try {
+      const nextUser = { ...user, photoURL: '' };
+      await setDoc(doc(db, 'users', user.uid), nextUser);
+      setImagePreview('');
+      setImageMessage('Profile image removed.');
+    } catch (error) {
+      console.error('Error removing profile image:', error);
+      setImageMessage('Profile image remove nahi ho paayi.');
+    } finally {
+      setIsSavingImage(false);
+    }
+  };
+
   const stats = {
     matches: playerStats?.stats?.matches || 0,
     runs: playerStats?.stats?.runs || 0,
@@ -1057,7 +1298,7 @@ const Profile = () => {
       <div className="bg-yellow-500 p-8 flex flex-col items-center gap-4">
         <div className="w-24 h-24 rounded-[2.5rem] bg-white border-4 border-white overflow-hidden shadow-2xl rotate-3">
           <img 
-            src={user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid || 'default'}`} 
+            src={imagePreview || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid || 'default'}`} 
             alt="Profile" 
             className="w-full h-full object-cover -rotate-3" 
             referrerPolicy="no-referrer"
@@ -1066,6 +1307,29 @@ const Profile = () => {
         <div className="text-center">
           <h2 className="text-2xl font-black text-black italic uppercase tracking-tighter">{user?.displayName || 'Cricket Hero'}</h2>
           <p className="text-black/60 font-bold text-xs uppercase tracking-widest mt-1">{user?.email || user?.phoneNumber || 'Player Profile'}</p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <label className="bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest">
+              {isSavingImage ? 'Saving...' : 'Upload Photo'}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleProfileImageChange}
+                className="hidden"
+                disabled={isSavingImage}
+              />
+            </label>
+            {imagePreview && (
+              <button
+                onClick={handleRemoveProfileImage}
+                disabled={isSavingImage}
+                className="bg-white/80 text-black px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-black/10 disabled:opacity-60"
+              >
+                Remove Photo
+              </button>
+            )}
+          </div>
+          <p className="text-[9px] text-black/50 font-bold uppercase tracking-widest">JPG, PNG ya WebP image upload kar sakte ho.</p>
+          {imageMessage && <p className="text-[10px] text-black/70 font-bold uppercase tracking-widest mt-2">{imageMessage}</p>}
           {!user?.phoneNumber && (
             <div className="mt-4 flex flex-col gap-2">
               <div className="flex gap-2">
@@ -1197,14 +1461,23 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     console.log('AuthProvider: Initializing auth listener...');
+    let unsubscribeUserDoc: (() => void) | undefined;
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log('AuthProvider: Auth state changed:', firebaseUser?.uid);
+      if (unsubscribeUserDoc) {
+        unsubscribeUserDoc();
+        unsubscribeUserDoc = undefined;
+      }
       try {
         if (firebaseUser) {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
             console.log('AuthProvider: User doc found');
-            setUser(userDoc.data() as UserProfile);
+            unsubscribeUserDoc = onSnapshot(doc(db, 'users', firebaseUser.uid), (snapshot) => {
+              if (snapshot.exists()) {
+                setUser(snapshot.data() as UserProfile);
+              }
+            });
           } else {
             console.log('AuthProvider: Creating new user doc');
             const newUser: UserProfile = {
@@ -1226,7 +1499,13 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setLoading(false);
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      if (unsubscribeUserDoc) {
+        unsubscribeUserDoc();
+      }
+      unsubscribe();
+    };
   }, []);
 
   const login = async () => {
@@ -1307,7 +1586,12 @@ const MainContent = () => {
   const { user, loading, error, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [view, setView] = useState<ViewState>('main');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    return savedTheme === 'dark' ? 'dark' : 'light';
+  });
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
 
@@ -1316,11 +1600,17 @@ const MainContent = () => {
       setShowWelcome(true);
     }
   }, [user]);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    document.documentElement.classList.toggle('theme-dark', theme === 'dark');
+  }, [theme]);
   
   const [matches, setMatches] = useState<any[]>([]);
   const [userTeamIds, setUserTeamIds] = useState<string[]>([]);
   const [recentMatches, setRecentMatches] = useState<any[]>([]);
   const [globalMatches, setGlobalMatches] = useState<any[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [teams, setTeams] = useState<Record<string, any>>({});
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -1347,7 +1637,19 @@ const MainContent = () => {
       handleFirestoreError(error, OperationType.GET, 'matches');
     });
 
-    if (!user) return;
+    const qTournaments = query(collection(db, 'tournaments'), orderBy('createdAt', 'desc'), limit(6));
+    const unsubTournaments = onSnapshot(qTournaments, (snap) => {
+      setTournaments(snap.docs.map((tournamentDoc) => ({ id: tournamentDoc.id, ...tournamentDoc.data() } as Tournament)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'tournaments');
+    });
+
+    if (!user) {
+      return () => {
+        unsubGlobal();
+        unsubTournaments();
+      };
+    }
     console.log('MainContent: Initializing match listeners...');
     
     // Matches created by user
@@ -1429,7 +1731,7 @@ const MainContent = () => {
       handleFirestoreError(error, OperationType.GET, 'notifications');
     });
 
-    return () => { unsubLive(); unsubRecent(); unsubGlobal(); unsubNotif(); unsubPlayer(); };
+    return () => { unsubLive(); unsubRecent(); unsubGlobal(); unsubNotif(); unsubPlayer(); unsubTournaments(); };
   }, [user]);
 
   if (loading) {
@@ -1456,8 +1758,8 @@ const MainContent = () => {
       <SearchPage 
         onBack={() => setView('main')} 
         onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }}
-        onTeamClick={(id) => { /* Handle team click */ }}
-        onTournamentClick={(id) => { /* Handle tournament click */ }}
+        onTeamClick={(id) => { setActiveMatchId(id); setView('teamDetails'); }}
+        onTournamentClick={(id) => { setActiveTournamentId(id); setView('tournamentDetails'); }}
       />
     );
     if (view === 'playerDetails' && activeMatchId) return (
@@ -1471,6 +1773,15 @@ const MainContent = () => {
     if (view === 'create-player') return <CreatePlayer onBack={() => setView('main')} />;
     if (view === 'start-match') return <StartMatch onBack={() => setView('main')} onStart={(id) => { setActiveMatchId(id); setView('scorer'); }} />;
     if (view === 'create-tournament') return <CreateTournament onBack={() => setView('main')} />;
+    if (view === 'tournamentDetails' && activeTournamentId) return (
+      <TournamentDetails
+        tournamentId={activeTournamentId}
+        onBack={() => setView('main')}
+        onTeamClick={(id) => { setActiveMatchId(id); setView('teamDetails'); }}
+        onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }}
+        onMatchClick={(id) => { setActiveMatchId(id); setView('matchDetails'); }}
+      />
+    );
     if (view === 'scorer' && activeMatchId) return <Scorer matchId={activeMatchId} onBack={() => setView('main')} />;
     if (view === 'matchDetails' && activeMatchId) return <MatchDetails matchId={activeMatchId} onBack={() => setView('main')} />;
     if (view === 'teamDetails' && activeMatchId) return (
@@ -1525,6 +1836,20 @@ const MainContent = () => {
           <ArrowLeft size={16} /> Back
         </button>
         <h2 className="text-2xl font-black italic uppercase text-gray-900 mb-4">Settings</h2>
+        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-black text-gray-900 uppercase tracking-tight">Dark Mode</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">Switch app appearance</p>
+          </div>
+          <button
+            onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+            className={`relative w-16 h-9 rounded-full transition-colors ${theme === 'dark' ? 'bg-yellow-500' : 'bg-gray-200'}`}
+          >
+            <span
+              className={`absolute top-1 h-7 w-7 rounded-full bg-white shadow-md transition-all ${theme === 'dark' ? 'left-8' : 'left-1'}`}
+            />
+          </button>
+        </div>
       </div>
     );
 
@@ -1539,29 +1864,32 @@ const MainContent = () => {
     };
 
     switch (activeTab) {
-      case 'home': return <Home onStartMatch={() => setView('start-match')} onMatchClick={handleMatchClick} matches={matches} recentMatches={recentMatches} globalMatches={globalMatches} teams={teams} userTeamIds={userTeamIds} />;
+      case 'home': return <Home onStartMatch={() => setView('start-match')} onMatchClick={handleMatchClick} matches={matches} recentMatches={recentMatches} globalMatches={globalMatches} teams={teams} tournaments={tournaments} userTeamIds={userTeamIds} />;
       case 'teams': return (
         <Teams 
           onCreateTeam={() => setView('create-team')} 
           onCreatePlayer={() => setView('create-player')} 
+          liveMatches={globalMatches}
           onTeamClick={(id) => { setActiveMatchId(id); setView('teamDetails'); }}
         />
       );
+      case 'tournaments': return <Tournaments onCreateTournament={() => setView('create-tournament')} onTournamentClick={(id) => { setActiveTournamentId(id); setView('tournamentDetails'); }} />;
       case 'leaderboard': return <Leaderboard onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }} />;
       case 'profile': return <Profile />;
-      default: return <Home onStartMatch={() => setView('start-match')} onMatchClick={handleMatchClick} matches={matches} recentMatches={recentMatches} globalMatches={globalMatches} teams={teams} userTeamIds={userTeamIds} />;
+      default: return <Home onStartMatch={() => setView('start-match')} onMatchClick={handleMatchClick} matches={matches} recentMatches={recentMatches} globalMatches={globalMatches} teams={teams} tournaments={tournaments} userTeamIds={userTeamIds} />;
     }
   };
 
   const titles: Record<string, string> = {
     home: 'Score Wala',
     teams: 'My Teams',
+    tournaments: 'Tournaments',
     leaderboard: 'Leaderboard',
     profile: 'My Profile',
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans selection:bg-yellow-200">
+    <div className={`min-h-screen bg-gray-50 font-sans selection:bg-yellow-200 ${theme === 'dark' ? 'theme-dark' : ''}`}>
       <Header 
         title={titles[activeTab] || 'Score Wala'} 
         onMenuClick={() => setIsMenuOpen(true)} 
@@ -1601,6 +1929,16 @@ const MainContent = () => {
                 <MenuLink icon={History} label="Match History" onClick={() => { setView('history'); setIsMenuOpen(false); }} />
                 <MenuLink icon={Users} label="My Teams" onClick={() => { setActiveTab('teams'); setIsMenuOpen(false); }} />
                 <MenuLink icon={Trophy} label="My Tournaments" onClick={() => { setActiveTab('tournaments'); setIsMenuOpen(false); }} />
+                <button
+                  onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+                  className="w-full flex items-center justify-between gap-4 px-6 py-3.5 text-gray-700 hover:bg-gray-50 transition-colors group"
+                >
+                  <div className="flex items-center gap-4">
+                    <Settings size={20} className="text-gray-400 group-hover:text-yellow-600 transition-colors" />
+                    <span className="font-medium">Dark Mode</span>
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-yellow-600">{theme === 'dark' ? 'On' : 'Off'}</span>
+                </button>
                 <div className="h-px bg-gray-100 my-2" />
                 <MenuLink icon={Info} label="About Us" onClick={() => { setView('about'); setIsMenuOpen(false); }} />
                 <MenuLink icon={HelpCircle} label="Help & Support" onClick={() => { setView('help'); setIsMenuOpen(false); }} />

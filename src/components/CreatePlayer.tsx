@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { db, collection, addDoc, auth, handleFirestoreError, OperationType } from '../firebase';
-import { ArrowLeft, User, ChevronRight } from 'lucide-react';
+import { ArrowLeft, User, ChevronRight, Link2, Trophy } from 'lucide-react';
 import { Player } from '../types';
+import { findPlayersByPhone } from '../utils/playerLookup';
 
 export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
   const [name, setName] = useState('');
@@ -11,6 +12,39 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
   const [battingStyle, setBattingStyle] = useState('Right Hand Bat');
   const [bowlingStyle, setBowlingStyle] = useState('Right Arm Fast');
   const [loading, setLoading] = useState(false);
+  const [linkedPlayer, setLinkedPlayer] = useState<Player | null>(null);
+  const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+
+  const handlePhoneLookup = async (value: string) => {
+    if (value.replace(/\D/g, '').length < 10) {
+      setLinkedPlayer(null);
+      setInfoMessage(null);
+      return;
+    }
+
+    setIsCheckingPhone(true);
+    try {
+      const players = await findPlayersByPhone(value);
+      const existingPlayer = players[0] || null;
+      setLinkedPlayer(existingPlayer);
+
+      if (existingPlayer) {
+        setName(existingPlayer.name);
+        setEmail(existingPlayer.email || '');
+        setRole(existingPlayer.role);
+        setBattingStyle(existingPlayer.battingStyle || 'Right Hand Bat');
+        setBowlingStyle(existingPlayer.bowlingStyle || 'Right Arm Fast');
+        setInfoMessage('Existing player profile found. Stats and history will stay linked with this phone number.');
+      } else {
+        setInfoMessage(null);
+      }
+    } catch (error) {
+      console.error('Error finding player by phone:', error);
+    } finally {
+      setIsCheckingPhone(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,6 +52,12 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
 
     setLoading(true);
     try {
+      if (linkedPlayer) {
+        setInfoMessage('This player already exists globally. Use this phone number in team search to add the same profile with full stats.');
+        onBack();
+        return;
+      }
+
       await addDoc(collection(db, 'players'), {
         name,
         email: email || null,
@@ -69,12 +109,48 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
               type="tel"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
+              onBlur={(e) => void handlePhoneLookup(e.target.value)}
               placeholder="Enter phone number"
               className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-medium"
             />
           </div>
-          <p className="text-[10px] text-gray-400 italic">Linking phone number allows the player to see their matches and stats on their phone.</p>
+          <p className="text-[10px] text-gray-400 italic">Same phone number se existing player profile, stats aur history auto link ho jayegi.</p>
+          {isCheckingPhone && <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Checking existing profile...</p>}
         </div>
+
+        {linkedPlayer && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-3xl p-5 flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-yellow-700">
+              <Link2 size={16} />
+              <p className="text-[10px] font-black uppercase tracking-widest">Existing Player Linked</p>
+            </div>
+            <div>
+              <h3 className="text-lg font-black italic uppercase tracking-tight text-gray-900">{linkedPlayer.name}</h3>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mt-1">{linkedPlayer.role}</p>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-2xl bg-white px-3 py-3 border border-yellow-100">
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">Matches</p>
+                <p className="mt-1 text-lg font-black text-gray-900">{linkedPlayer.stats?.matches || 0}</p>
+              </div>
+              <div className="rounded-2xl bg-white px-3 py-3 border border-yellow-100">
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">Runs</p>
+                <p className="mt-1 text-lg font-black text-gray-900">{linkedPlayer.stats?.runs || 0}</p>
+              </div>
+              <div className="rounded-2xl bg-white px-3 py-3 border border-yellow-100">
+                <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">Wkts</p>
+                <p className="mt-1 text-lg font-black text-gray-900">{linkedPlayer.stats?.wickets || 0}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {infoMessage && !linkedPlayer && (
+          <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
+            <Trophy size={16} className="text-blue-600 mt-0.5" />
+            <p className="text-xs font-bold text-blue-800">{infoMessage}</p>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Player Email (Optional)</label>
@@ -142,7 +218,7 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
           disabled={loading}
           className="w-full bg-black text-white py-4 rounded-2xl font-bold text-lg shadow-xl active:scale-95 transition-transform flex items-center justify-center gap-3 mt-4 disabled:opacity-50"
         >
-          {loading ? 'Saving...' : 'Save Player'}
+          {loading ? 'Saving...' : linkedPlayer ? 'Use Existing Profile' : 'Save Player'}
           {!loading && <ChevronRight size={20} />}
         </button>
       </form>

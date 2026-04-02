@@ -36,6 +36,7 @@ export interface Team {
   name: string;
   logo?: string;
   players: string[]; // Array of player IDs
+  captainId?: string;
   createdBy: string;
 }
 
@@ -43,8 +44,18 @@ export interface Tournament {
   id: string;
   name: string;
   organizer: string;
+  city?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: 'upcoming' | 'live' | 'completed';
+  format?: string;
+  overs?: number;
+  description?: string;
   teams: string[]; // Array of team IDs
+  teamCount?: number;
+  playerCount?: number;
   createdBy: string;
+  createdAt?: any;
 }
 
 export interface MatchScore {
@@ -70,6 +81,7 @@ export interface Match {
   id: string;
   teamA: string; // Team ID
   teamB: string; // Team ID
+  tournamentId?: string;
   status: 'upcoming' | 'live' | 'completed';
   tossWinner?: string;
   tossDecision?: 'bat' | 'bowl';

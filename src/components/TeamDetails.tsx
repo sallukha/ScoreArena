@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { db, doc, getDoc, updateDoc, collection, query, where, onSnapshot, handleFirestoreError, OperationType, limit, addDoc, serverTimestamp, auth } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, UserPlus, ArrowLeft, Search, X, ChevronRight, Trophy, Shield } from 'lucide-react';
+import { Users, UserPlus, ArrowLeft, Search, X, ChevronRight, Trophy, Shield, Link2 } from 'lucide-react';
 import { Team, Player } from '../types';
+import { findPlayersByPhone } from '../utils/playerLookup';
 
 interface TeamDetailsProps {
   teamId: string;
@@ -18,8 +19,12 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
   const [isQuickAdding, setIsQuickAdding] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [phoneLookupQuery, setPhoneLookupQuery] = useState('');
+  const [linkedPhonePlayer, setLinkedPhonePlayer] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  const captain = teamPlayers.find((player) => player.id === team?.captainId);
 
   useEffect(() => {
     const unsubTeam = onSnapshot(doc(db, 'teams', teamId), (docSnap) => {
@@ -67,12 +72,24 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
     }
   };
 
+  const updateCaptain = async (playerId: string) => {
+    if (!team) return;
+    try {
+      await updateDoc(doc(db, 'teams', teamId), {
+        captainId: playerId
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `teams/${teamId}`);
+    }
+  };
+
   const removePlayerFromTeam = async (playerId: string) => {
     if (!team) return;
     const currentPlayers = team.players || [];
     try {
       await updateDoc(doc(db, 'teams', teamId), {
-        players: currentPlayers.filter(id => id !== playerId)
+        players: currentPlayers.filter(id => id !== playerId),
+        captainId: team.captainId === playerId ? '' : team.captainId || ''
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `teams/${teamId}`);
@@ -106,6 +123,17 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
     }
   };
 
+  const handlePhoneLookup = async () => {
+    if (phoneLookupQuery.replace(/\D/g, '').length < 10) return;
+    try {
+      const players = await findPlayersByPhone(phoneLookupQuery);
+      setLinkedPhonePlayer(players[0] || null);
+    } catch (error) {
+      console.error('Error finding player by phone:', error);
+      setLinkedPhonePlayer(null);
+    }
+  };
+
   const filteredPlayers = allPlayers.filter(p => 
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
     !team?.players?.includes(p.id)
@@ -130,6 +158,9 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
             <h2 className="text-3xl font-black italic uppercase tracking-tighter text-black leading-none">{team.name}</h2>
             <p className="text-black/60 font-bold text-xs uppercase tracking-widest mt-2 flex items-center gap-1">
               <Users size={12} /> {teamPlayers.length} Members
+            </p>
+            <p className="text-black/70 font-bold text-xs uppercase tracking-widest mt-2 flex items-center gap-1">
+              <Shield size={12} /> Captain: {captain?.name || 'Not Selected'}
             </p>
           </div>
         </div>
@@ -169,6 +200,23 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
         </div>
 
         <div className="flex flex-col gap-3">
+          {teamPlayers.length > 0 && (
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Select Captain</p>
+              <select
+                value={team.captainId || ''}
+                onChange={(e) => updateCaptain(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-4 font-bold text-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+              >
+                <option value="">Choose captain</option>
+                {teamPlayers.map((player) => (
+                  <option key={player.id} value={player.id}>
+                    {player.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {teamPlayers.length === 0 ? (
             <div className="bg-white p-12 rounded-[2.5rem] border border-dashed border-gray-200 text-center">
               <Users size={40} className="mx-auto text-gray-200 mb-4" />
@@ -186,7 +234,14 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                     {player.name[0]}
                   </div>
                   <div>
-                    <h4 className="font-black italic uppercase tracking-tighter text-gray-900">{player.name}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-black italic uppercase tracking-tighter text-gray-900">{player.name}</h4>
+                      {team.captainId === player.id && (
+                        <span className="rounded-full bg-yellow-100 text-yellow-700 px-2 py-1 text-[9px] font-black uppercase tracking-widest">
+                          Captain
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{player.role}</p>
                   </div>
                 </div>
@@ -278,6 +333,45 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                     </button>
                   </div>
 
+                  <div className="flex gap-3 mb-6">
+                    <input
+                      type="tel"
+                      placeholder="Find by phone number..."
+                      value={phoneLookupQuery}
+                      onChange={(e) => setPhoneLookupQuery(e.target.value)}
+                      className="flex-1 bg-yellow-50 border border-yellow-100 rounded-2xl py-4 px-4 font-bold text-sm focus:ring-2 focus:ring-yellow-500"
+                    />
+                    <button
+                      onClick={handlePhoneLookup}
+                      type="button"
+                      className="bg-yellow-500 text-black px-5 rounded-2xl font-black text-[10px] uppercase tracking-widest"
+                    >
+                      Find
+                    </button>
+                  </div>
+
+                  {linkedPhonePlayer && !team?.players?.includes(linkedPhonePlayer.id) && (
+                    <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-yellow-700 mb-2">
+                          <Link2 size={14} />
+                          <p className="text-[10px] font-black uppercase tracking-widest">Existing Profile Found</p>
+                        </div>
+                        <p className="font-black text-gray-900 truncate">{linkedPhonePlayer.name}</p>
+                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
+                          {linkedPhonePlayer.role} • {linkedPhonePlayer.stats?.matches || 0} M • {linkedPhonePlayer.stats?.runs || 0} R • {linkedPhonePlayer.stats?.wickets || 0} W
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => addPlayerToTeam(linkedPhonePlayer.id)}
+                        className="shrink-0 bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                      >
+                        Add Player
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex flex-col gap-3">
                     {filteredPlayers.map(player => (
                       <button
@@ -292,6 +386,9 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                           <div>
                             <p className="font-bold text-gray-900">{player.name}</p>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{player.role}</p>
+                            <p className="text-[10px] text-gray-400 font-bold mt-1">
+                              {player.stats?.matches || 0} M • {player.stats?.runs || 0} R • {player.stats?.wickets || 0} W
+                            </p>
                           </div>
                         </div>
                         <UserPlus size={18} className="text-yellow-600" />

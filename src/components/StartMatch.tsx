@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db, collection, addDoc, auth, getDocs, query, where, serverTimestamp, handleFirestoreError, OperationType } from '../firebase';
 import { ArrowLeft, Trophy, ChevronRight, Users, Settings2, CreditCard } from 'lucide-react';
-import { Team } from '../types';
+import { Team, Tournament } from '../types';
 
 declare global {
   interface Window {
@@ -14,18 +14,39 @@ export const StartMatch = ({ onBack, onStart }: { onBack: () => void, onStart: (
   const [teamB, setTeamB] = useState('');
   const [overs, setOvers] = useState(20);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [tournamentId, setTournamentId] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
 
   useEffect(() => {
-    const fetchTeams = async () => {
+    const fetchData = async () => {
       if (!auth.currentUser) return;
-      const q = query(collection(db, 'teams'), where('createdBy', '==', auth.currentUser.uid));
-      const snapshot = await getDocs(q);
-      setAllTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team)));
+      const [teamsSnapshot, tournamentsSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'teams'), where('createdBy', '==', auth.currentUser.uid))),
+        getDocs(query(collection(db, 'tournaments'), where('createdBy', '==', auth.currentUser.uid))),
+      ]);
+      setAllTeams(teamsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team)));
+      setTournaments(tournamentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tournament)));
     };
-    fetchTeams();
+    fetchData();
   }, []);
+
+  const availableTeams = useMemo(() => {
+    if (!tournamentId) return allTeams;
+    const tournament = tournaments.find((item) => item.id === tournamentId);
+    if (!tournament) return allTeams;
+    return allTeams.filter((team) => tournament.teams?.includes(team.id));
+  }, [allTeams, tournamentId, tournaments]);
+
+  useEffect(() => {
+    if (teamA && !availableTeams.some((team) => team.id === teamA)) {
+      setTeamA('');
+    }
+    if (teamB && !availableTeams.some((team) => team.id === teamB)) {
+      setTeamB('');
+    }
+  }, [availableTeams, teamA, teamB]);
 
   const handlePayment = () => {
     if (!teamA || !teamB || teamA === teamB || !auth.currentUser) return;
@@ -66,6 +87,7 @@ export const StartMatch = ({ onBack, onStart }: { onBack: () => void, onStart: (
       const matchData = {
         teamA,
         teamB,
+        tournamentId,
         status: 'live',
         overs,
         scoreA: { runs: 0, wickets: 0, overs: 0, balls: 0, extras: 0 },
@@ -151,6 +173,22 @@ export const StartMatch = ({ onBack, onStart }: { onBack: () => void, onStart: (
       <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-8">
         <div className="flex flex-col gap-4">
           <label className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+            <Trophy size={14} /> Tournament
+          </label>
+          <select
+            value={tournamentId}
+            onChange={(e) => setTournamentId(e.target.value)}
+            className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-bold text-gray-800"
+          >
+            <option value="">Independent Match</option>
+            {tournaments.map((tournament) => (
+              <option key={tournament.id} value={tournament.id}>{tournament.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
             <Users size={14} /> Select Teams
           </label>
           <div className="flex flex-col gap-3">
@@ -161,7 +199,7 @@ export const StartMatch = ({ onBack, onStart }: { onBack: () => void, onStart: (
               required
             >
               <option value="">Select Team A</option>
-              {allTeams.map(team => (
+              {availableTeams.map(team => (
                 <option key={team.id} value={team.id}>{team.name}</option>
               ))}
             </select>
@@ -175,7 +213,7 @@ export const StartMatch = ({ onBack, onStart }: { onBack: () => void, onStart: (
               required
             >
               <option value="">Select Team B</option>
-              {allTeams.map(team => (
+              {availableTeams.map(team => (
                 <option key={team.id} value={team.id}>{team.name}</option>
               ))}
             </select>

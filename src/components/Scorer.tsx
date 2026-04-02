@@ -330,6 +330,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   } | null>(null);
   const [shownMilestones, setShownMilestones] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [correctionMessage, setCorrectionMessage] = useState('');
+  const [isCorrectionMenuOpen, setIsCorrectionMenuOpen] = useState(false);
+  const [overEndNotice, setOverEndNotice] = useState<null | {
+    overNumber: number;
+    bowlerName: string;
+    scoreline: string;
+  }>(null);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -338,6 +345,74 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     setIsRefreshing(false);
   };
   const [extraMode, setExtraMode] = useState<'wide' | 'no-ball' | null>(null);
+
+  const createEmptyStats = () => ({
+    runs: 0,
+    balls: 0,
+    fours: 0,
+    sixes: 0,
+    overs: 0,
+    ballsBowled: 0,
+    runsConceded: 0,
+    wickets: 0,
+  });
+
+  const openOverEndNotice = (overNumber: number, bowlerName: string, scoreline: string) => {
+    setOverEndNotice({
+      overNumber,
+      bowlerName: bowlerName || 'Current Bowler',
+      scoreline,
+    });
+  };
+
+  const createMatchSnapshot = () => {
+    if (!match) return null;
+    return {
+      scoreA: match.scoreA,
+      scoreB: match.scoreB,
+      status: match.status,
+      currentInnings: match.currentInnings,
+      playerStats: match.playerStats || {},
+      fallOfWickets: match.fallOfWickets || [],
+      recentBalls: match.recentBalls || [],
+      striker: match.striker || null,
+      strikerName: match.strikerName || null,
+      nonStriker: match.nonStriker || null,
+      nonStrikerName: match.nonStrikerName || null,
+      bowler: match.bowler || null,
+      bowlerName: match.bowlerName || null,
+    };
+  };
+
+  const restoreSnapshotAndDeleteBalls = async (snapshotBefore: any, ballsToDelete: Array<{ id: string }>, message: string) => {
+    if (!snapshotBefore) {
+      setCorrectionMessage('Is ball ko edit karne ke liye snapshot available nahi hai. Last ball correction use karo.');
+      return;
+    }
+
+    await updateDoc(doc(db, 'matches', matchId), {
+      scoreA: snapshotBefore.scoreA,
+      scoreB: snapshotBefore.scoreB,
+      status: snapshotBefore.status,
+      currentInnings: snapshotBefore.currentInnings,
+      playerStats: snapshotBefore.playerStats || {},
+      fallOfWickets: snapshotBefore.fallOfWickets || [],
+      recentBalls: snapshotBefore.recentBalls || [],
+      striker: snapshotBefore.striker || null,
+      strikerName: snapshotBefore.strikerName || null,
+      nonStriker: snapshotBefore.nonStriker || null,
+      nonStrikerName: snapshotBefore.nonStrikerName || null,
+      bowler: snapshotBefore.bowler || null,
+      bowlerName: snapshotBefore.bowlerName || null,
+      statsFinalized: false,
+    });
+
+    for (const ball of ballsToDelete) {
+      await deleteDoc(doc(db, 'matches', matchId, 'balls', ball.id));
+    }
+
+    setCorrectionMessage(message);
+  };
 
   useEffect(() => {
     if (!matchId) return;
@@ -671,6 +746,8 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     }
 
     try {
+      setCorrectionMessage('');
+      const snapshotBefore = createMatchSnapshot();
       const isMatchOver = match.currentInnings === 2 && 
         (newRuns > match.scoreA.runs || (newOvers === match.overs && newBalls === 0));
       
@@ -716,8 +793,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         extraType: extraType || null,
         batsman: strikerId || null,
         bowler: bowlerId || null,
+        snapshotBefore,
         timestamp: new Date()
       });
+
+      if (isLegalBall && newBalls === 0 && !isInningsOver && !isMatchOver) {
+        openOverEndNotice(newOvers, match.bowlerName || 'Current Bowler', `${newRuns}-${currentScore.wickets}`);
+      }
     } catch (error) {
       console.error('Error updating score:', error);
       handleFirestoreError(error, OperationType.UPDATE, `matches/${matchId}`);
@@ -816,6 +898,8 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     if (recentBalls.length > 12) recentBalls.shift();
 
     try {
+      setCorrectionMessage('');
+      const snapshotBefore = createMatchSnapshot();
       await updateDoc(doc(db, 'matches', matchId), {
         [currentScoreKey]: {
           ...currentScore,
@@ -845,8 +929,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         wicket: { type, player: strikerId || null, fielder: fielderId || null },
         batsman: strikerId || null,
         bowler: bowlerId || null,
+        snapshotBefore,
         timestamp: new Date()
       });
+
+      if (isLegalBall && newBalls === 0 && !isInningsOver && !isMatchOver) {
+        openOverEndNotice(newOvers, match.bowlerName || 'Current Bowler', `${currentScore.runs}-${newWickets}`);
+      }
     } catch (error) {
       console.error('Error recording wicket:', error);
       handleFirestoreError(error, OperationType.UPDATE, `matches/${matchId}`);
@@ -864,20 +953,33 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       const snap = await getDocs(q);
       if (snap.empty) return;
 
-      const lastBall = snap.docs[0].data();
+      const lastBall = snap.docs[0].data() as any;
       const lastBallId = snap.docs[0].id;
 
-      // Reverse the score logic (simplified)
-      const currentScoreKey = match.currentInnings === 1 ? 'scoreA' : 'scoreB';
-      const currentScore = match[currentScoreKey];
+      if (lastBall.snapshotBefore) {
+        await restoreSnapshotAndDeleteBalls(
+          lastBall.snapshotBefore,
+          [{ id: lastBallId }],
+          'Last ball hata diya gaya. Ab sahi ball dubara score kar do.'
+        );
+        return;
+      }
+
+      const scoreKey = lastBall.innings === 2 ? 'scoreB' : 'scoreA';
+      const currentScore = (match as any)[scoreKey];
       
-      let newRuns = currentScore.runs - (lastBall.runs || 0);
+      const isWideOrNoBall = lastBall.extraType === 'wide' || lastBall.extraType === 'no-ball';
+      const extraRuns = lastBall.extraType ? (isWideOrNoBall ? Number(lastBall.runs || 0) + 1 : Number(lastBall.runs || 0)) : 0;
+      const batterRuns = !lastBall.extraType || lastBall.extraType === 'no-ball' ? Number(lastBall.runs || 0) : 0;
+      const isLegalBall = !lastBall.extraType || lastBall.extraType === 'bye' || lastBall.extraType === 'leg-bye';
+      const facesBall = !lastBall.extraType || lastBall.extraType === 'no-ball' || lastBall.extraType === 'bye' || lastBall.extraType === 'leg-bye';
+
+      let newRuns = currentScore.runs - (lastBall.extraType ? extraRuns : Number(lastBall.runs || 0));
       let newWickets = currentScore.wickets - (lastBall.wicket ? 1 : 0);
       let newBalls = currentScore.balls;
       let newOvers = currentScore.overs;
-      let newExtras = currentScore.extras - (lastBall.extraType ? (lastBall.runs || 1) : 0);
+      let newExtras = currentScore.extras - extraRuns;
 
-      const isLegalBall = !lastBall.extraType || lastBall.extraType === 'bye' || lastBall.extraType === 'leg-bye';
       if (isLegalBall) {
         if (newBalls === 0) {
           newOvers -= 1;
@@ -887,25 +989,148 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         }
       }
 
-      // In a real app, you'd also reverse player stats. 
-      // For this demo, we'll just update the main score and delete the ball.
-      
+      const playerStats = { ...(match.playerStats || {}) };
+      const strikerId = lastBall.batsman || '';
+      const bowlerId = lastBall.bowler || '';
+
+      if (strikerId) {
+        const stats = { ...(playerStats[strikerId] || createEmptyStats()) };
+        if (facesBall) stats.balls = Math.max(0, stats.balls - 1);
+        stats.runs = Math.max(0, stats.runs - batterRuns);
+        if (batterRuns === 4) stats.fours = Math.max(0, stats.fours - 1);
+        if (batterRuns === 6) stats.sixes = Math.max(0, stats.sixes - 1);
+        playerStats[strikerId] = stats;
+      }
+
+      if (bowlerId) {
+        const stats = { ...(playerStats[bowlerId] || createEmptyStats()) };
+        if (isLegalBall) {
+          if (stats.ballsBowled === 0 && stats.overs > 0) {
+            stats.overs = Math.max(0, stats.overs - 1);
+            stats.ballsBowled = 5;
+          } else {
+            stats.ballsBowled = Math.max(0, stats.ballsBowled - 1);
+          }
+        }
+
+        if (lastBall.extraType) {
+          if (isWideOrNoBall) {
+            stats.runsConceded = Math.max(0, stats.runsConceded - extraRuns);
+          }
+        } else {
+          stats.runsConceded = Math.max(0, stats.runsConceded - Number(lastBall.runs || 0));
+        }
+
+        if (lastBall.wicket && lastBall.wicket.type !== 'run-out' && lastBall.wicket.type !== 'retired-hurt') {
+          stats.wickets = Math.max(0, stats.wickets - 1);
+        }
+        playerStats[bowlerId] = stats;
+      }
+
+      const fallOfWickets = [...(match.fallOfWickets || [])];
+      if (lastBall.wicket) {
+        let removeIndex = -1;
+        for (let i = fallOfWickets.length - 1; i >= 0; i -= 1) {
+          const entry = fallOfWickets[i];
+          if (
+            entry.player === lastBall.wicket.player &&
+            entry.innings === lastBall.innings &&
+            entry.type === lastBall.wicket.type
+          ) {
+            removeIndex = i;
+            break;
+          }
+        }
+        if (removeIndex >= 0) {
+          fallOfWickets.splice(removeIndex, 1);
+        }
+      }
+
+      const rebuiltRecentBalls = [...(match.recentBalls || [])];
+      rebuiltRecentBalls.pop();
+
+      const strikerName =
+        battingPlayers.find((player) => player.id === strikerId)?.name ||
+        match.strikerName ||
+        null;
+      const bowlerName =
+        bowlingPlayers.find((player) => player.id === bowlerId)?.name ||
+        match.bowlerName ||
+        null;
+
+      const shouldRestoreFirstInnings = lastBall.innings === 1 && match.currentInnings === 2;
+      const shouldRestoreLive = match.status === 'completed';
+
       await updateDoc(doc(db, 'matches', matchId), {
-        [currentScoreKey]: {
+        [scoreKey]: {
           ...currentScore,
           runs: Math.max(0, newRuns),
           wickets: Math.max(0, newWickets),
-          balls: newBalls,
-          overs: newOvers,
+          balls: Math.max(0, newBalls),
+          overs: Math.max(0, newOvers),
           extras: Math.max(0, newExtras)
-        }
+        },
+        currentInnings: shouldRestoreFirstInnings ? 1 : match.currentInnings,
+        status: shouldRestoreLive ? 'live' : match.status,
+        playerStats,
+        fallOfWickets,
+        recentBalls: rebuiltRecentBalls,
+        striker: strikerId || null,
+        strikerName,
+        bowler: bowlerId || null,
+        bowlerName,
       });
 
       await deleteDoc(doc(db, 'matches', matchId, 'balls', lastBallId));
+      setCorrectionMessage('Last ball hata diya gaya. Ab sahi ball dubara score kar do.');
       console.log('Last ball undone');
     } catch (error) {
       console.error('Error undoing ball:', error);
     }
+  };
+
+  const correctFromBall = async (ballId: string) => {
+    if (!match) return;
+    try {
+      const ballSnap = await getDocs(
+        query(
+          collection(db, 'matches', matchId, 'balls'),
+          where('innings', '==', match.currentInnings),
+          orderBy('timestamp', 'asc')
+        )
+      );
+
+      const allBalls = ballSnap.docs.map((item) => ({ id: item.id, ...item.data() } as any));
+      const selectedIndex = allBalls.findIndex((ball) => ball.id === ballId);
+      if (selectedIndex < 0) return;
+
+      const selectedBall = allBalls[selectedIndex];
+      const ballsToDelete = allBalls.slice(selectedIndex).map((ball) => ({ id: ball.id }));
+
+      await restoreSnapshotAndDeleteBalls(
+        selectedBall.snapshotBefore,
+        ballsToDelete,
+        'Selected ball aur uske baad ka score hata diya gaya. Ab yahin se sahi scoring continue karo.'
+      );
+    } catch (error) {
+      console.error('Error correcting from selected ball:', error);
+    }
+  };
+
+  const describeBall = (ball: any) => {
+    if (!ball) return 'No last ball';
+    if (ball.wicket) return `Wicket${ball.wicket.type ? ` • ${ball.wicket.type}` : ''}`;
+    if (ball.extraType === 'wide') return `${Number(ball.runs || 0) + 1} Wide`;
+    if (ball.extraType === 'no-ball') return `${Number(ball.runs || 0) + 1} No Ball`;
+    if (ball.extraType) return `${ball.runs} ${ball.extraType}`;
+    return `${ball.runs} Run${Number(ball.runs) === 1 ? '' : 's'}`;
+  };
+
+  const getBallLabel = (ball: any, index: number) => {
+    if (ball?.over != null && ball?.ball != null) {
+      return `Over ${Number(ball.over) + 1}.${ball.ball}`;
+    }
+    return `Ball ${index + 1}`;
   };
 
   if (loading || !match || !teamA || !teamB) {
@@ -950,6 +1175,67 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         onClose={() => setIsExtrasModalOpen(false)}
         onSelect={(type, runs) => handleRun(runs, true, type)}
       />
+      <AnimatePresence>
+        {overEndNotice && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setOverEndNotice(null)}
+              className="fixed inset-0 z-[140] bg-black/65 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              className="fixed inset-x-4 top-1/2 z-[150] -translate-y-1/2 rounded-[2rem] bg-white p-6 shadow-2xl border border-yellow-100 max-w-sm mx-auto"
+            >
+              <div className="flex flex-col gap-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-yellow-600">Over Complete</p>
+                    <h3 className="text-3xl font-black italic uppercase tracking-tight text-gray-900 mt-2">
+                      {overEndNotice.overNumber} Overs Done
+                    </h3>
+                  </div>
+                  <div className="h-14 w-14 rounded-[1.4rem] bg-yellow-500 text-black flex items-center justify-center shadow-lg shadow-yellow-500/25">
+                    <Target size={24} />
+                  </div>
+                </div>
+
+                <div className="rounded-[1.6rem] bg-gray-50 border border-gray-100 p-4 flex flex-col gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Bowler Spell Update</p>
+                  <p className="text-base font-bold text-gray-900">{overEndNotice.bowlerName} ka over finish ho gaya.</p>
+                  <p className="text-sm font-bold text-gray-500">Score: {overEndNotice.scoreline}</p>
+                </div>
+
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-gray-400">
+                  Agla over shuru karne se pehle next bowler select kar lo.
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setOverEndNotice(null)}
+                    className="rounded-2xl bg-gray-100 text-gray-700 py-3.5 text-[11px] font-black uppercase tracking-[0.18em]"
+                  >
+                    Continue
+                  </button>
+                  <button
+                    onClick={() => {
+                      setOverEndNotice(null);
+                      setSelectionType('bowler');
+                    }}
+                    className="rounded-2xl bg-black text-white py-3.5 text-[11px] font-black uppercase tracking-[0.18em] shadow-xl"
+                  >
+                    Select Bowler
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
       {match.status === 'completed' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
           <motion.div
@@ -1096,6 +1382,83 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
               <div key={`empty-${i}`} className="min-w-[40px] h-10 rounded-full border-2 border-dashed border-gray-100" />
             ))}
           </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Correction Panel</h3>
+              <p className="text-sm font-bold text-gray-800 mt-1 truncate">
+                {describeBall(recentBalls[recentBalls.length - 1])}
+              </p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">
+                Last ball direct undo karo ya dropdown khol ke over ki kisi bhi ball ko edit karo.
+              </p>
+            </div>
+            <button
+              onClick={undoLastBall}
+              disabled={recentBalls.length === 0}
+              className="shrink-0 rounded-2xl bg-red-50 text-red-600 border border-red-100 px-4 py-3 text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+            >
+              Undo Last
+            </button>
+          </div>
+          {correctionMessage && (
+            <p className="text-[10px] font-black uppercase tracking-widest text-green-600">
+              {correctionMessage}
+            </p>
+          )}
+          {recentBalls.length > 0 && (
+            <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50">
+              <button
+                onClick={() => setIsCorrectionMenuOpen((prev) => !prev)}
+                className="w-full px-4 py-3 flex items-center justify-between gap-3 text-left bg-white"
+              >
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                    Edit Ball From This Over
+                  </p>
+                  <p className="text-sm font-bold text-gray-800 truncate mt-1">
+                    {recentBalls.length} ball options
+                  </p>
+                </div>
+                <ChevronRight
+                  size={18}
+                  className={`text-gray-400 transition-transform ${isCorrectionMenuOpen ? 'rotate-90' : ''}`}
+                />
+              </button>
+              {isCorrectionMenuOpen && (
+                <div className="p-3 border-t border-gray-100 grid grid-cols-1 gap-2">
+                  {recentBalls
+                    .slice()
+                    .reverse()
+                    .map((ball, reverseIndex) => {
+                      const actualIndex = recentBalls.length - 1 - reverseIndex;
+                      return (
+                        <button
+                          key={ball.id || actualIndex}
+                          onClick={() => correctFromBall(ball.id)}
+                          disabled={!ball.snapshotBefore}
+                          className="w-full rounded-2xl bg-white border border-gray-100 px-3 py-3 flex items-center justify-between gap-3 text-left disabled:bg-gray-100"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                              {getBallLabel(ball, actualIndex)}
+                            </p>
+                            <p className="text-sm font-bold text-gray-800 truncate mt-1">
+                              {describeBall(ball)}
+                            </p>
+                          </div>
+                          <span className="rounded-xl bg-black text-white px-3 py-2 text-[10px] font-black uppercase tracking-widest">
+                            Edit
+                          </span>
+                        </button>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Batsmen & Bowler Section */}
