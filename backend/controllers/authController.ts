@@ -29,7 +29,6 @@ function getFirebaseApiKey() {
     'AIzaSyA2sBh5eTwaAHkKhxbDynOEEcJPxi6Iz0w'
   );
 }
-
 async function lookupFirebaseUser(idToken: string) {
   const response = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(getFirebaseApiKey())}`,

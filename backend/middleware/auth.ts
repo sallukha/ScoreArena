@@ -5,7 +5,6 @@ type AuthenticatedUser = {
   uid: string;
   role: string;
 };
-
 declare global {
   namespace Express {
     interface Request {
@@ -13,7 +12,6 @@ declare global {
     }
   }
 }
-
 function getBearerToken(req: Request) {
   const header = String(req.headers.authorization || '');
   if (!header.startsWith('Bearer ')) {
@@ -28,7 +26,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!token) {
     return res.status(401).json({ error: 'Authorization token is required' });
   }
-
   try {
     const payload = verifyAccessToken(token);
     req.authUser = {

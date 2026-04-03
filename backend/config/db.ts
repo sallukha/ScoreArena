@@ -1,8 +1,6 @@
 import mongoose from 'mongoose';
-
 let isConnected = false;
 let lastConnectionError: string | null = null;
-
 function sanitizeMongoUri(uri: string) {
   try {
     const parsed = new URL(uri);
@@ -13,7 +11,6 @@ function sanitizeMongoUri(uri: string) {
     return uri.replace(/\/\/([^:/?#]+):([^@]+)@/, '//***:***@');
   }
 }
-
 export async function connectDatabase() {
   if (isConnected) return;
 
