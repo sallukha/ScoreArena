@@ -33,7 +33,7 @@ export const PlayerDetails = ({ playerId, onBack, onMatchClick }: {
 
       const uniqueTeamIds = Array.from(new Set(playerHistory.flatMap((match: any) => [match.teamA, match.teamB])));
       Promise.all(uniqueTeamIds.map(async (teamId) => {
-        const teamSnap = await getDoc(doc(db, 'teams', teamId));
+        const teamSnap = await getDoc(doc(db, 'teams', teamId as string));
         return { teamId, name: teamSnap.exists() ? teamSnap.data().name : 'Team' };
       })).then((resolvedTeams) => {
         setTeamNames(Object.fromEntries(resolvedTeams.map((team) => [team.teamId, team.name])));
@@ -172,7 +172,7 @@ export const PlayerDetails = ({ playerId, onBack, onMatchClick }: {
                 whileTap={{ scale: 0.98 }}
                 key={match.id}
                 onClick={() => onMatchClick(match.id)}
-                className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center justify-between group text-left"
+                className="bg-white p-6 rounded-4xl border border-gray-100 shadow-sm flex items-center justify-between group text-left"
               >
                 <div className="flex flex-col gap-4 text-left flex-1">
                   <div className="flex flex-col gap-1">
