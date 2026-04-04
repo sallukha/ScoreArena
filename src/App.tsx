@@ -87,22 +87,29 @@ const Navbar = ({ activeTab, setActiveTab }: { activeTab: string, setActiveTab: 
   const tabs = [
     { id: 'home', icon: LayoutDashboard, label: 'Home' },
     { id: 'teams', icon: Users, label: 'Teams' },
+    { id: 'myCricket', icon: History, label: 'My Cricket' },
     { id: 'leaderboard', icon: Trophy, label: 'Leaders' },
     { id: 'profile', icon: User, label: 'Profile' },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 flex justify-around items-center z-50">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-3 py-2 flex justify-around items-end z-50">
       {tabs.map((tab) => (
         <button
           key={tab.id}
           onClick={() => setActiveTab(tab.id)}
-          className={`flex flex-col items-center gap-1 transition-colors ${
-            activeTab === tab.id ? 'text-yellow-600' : 'text-gray-500 hover:text-gray-700'
+          className={`flex flex-col items-center gap-1 transition-all ${
+            tab.id === 'myCricket'
+              ? activeTab === tab.id
+                ? '-mt-6 bg-yellow-500 text-black shadow-xl shadow-yellow-500/25 rounded-2xl px-3 py-3 min-w-18'
+                : '-mt-5 bg-black text-white rounded-2xl px-3 py-3 min-w-18 hover:bg-gray-900'
+              : activeTab === tab.id
+                ? 'text-yellow-600'
+                : 'text-gray-500 hover:text-gray-700'
           }`}
         >
           <tab.icon size={24} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
-          <span className="text-[10px] font-medium uppercase tracking-wider">{tab.label}</span>
+          <span className={`font-medium uppercase tracking-wider ${tab.id === 'myCricket' ? 'text-[9px]' : 'text-[10px]'}`}>{tab.label}</span>
         </button>
       ))}
     </nav>
@@ -858,9 +865,10 @@ const CricketNews = () => {
   );
 };
 
-const Home = ({ onStartMatch, onMatchClick, matches, recentMatches, globalMatches, teams, tournaments, userTeamIds }: { 
+const Home = ({ onStartMatch, onMatchClick, onPlayerClick, matches, recentMatches, globalMatches, teams, tournaments, userTeamIds }: { 
   onStartMatch: () => void, 
   onMatchClick: (id: string) => void,
+  onPlayerClick: (id: string) => void,
   matches: any[],
   recentMatches: any[],
   globalMatches: any[],
@@ -868,6 +876,19 @@ const Home = ({ onStartMatch, onMatchClick, matches, recentMatches, globalMatche
   tournaments: Tournament[],
   userTeamIds: string[]
 }) => {
+  const [topLeaders, setTopLeaders] = useState<any[]>([]);
+
+  useEffect(() => {
+    const qLeaders = query(collection(db, 'players'), orderBy('stats.runs', 'desc'), limit(3));
+    const unsubLeaders = onSnapshot(qLeaders, (snap) => {
+      setTopLeaders(snap.docs.map((leaderDoc) => ({ id: leaderDoc.id, ...leaderDoc.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'players');
+    });
+
+    return () => unsubLeaders();
+  }, []);
+
   // Combine matches created by user and matches where user's team is playing
   const myLiveMatches = globalMatches.filter(m => 
     m.createdBy === matches[0]?.createdBy || // Created by user (using first match as proxy for user ID if needed, but we have user.uid)
@@ -927,6 +948,54 @@ const Home = ({ onStartMatch, onMatchClick, matches, recentMatches, globalMatche
           </div>
         </div>
       )}
+
+      <div className="flex flex-col gap-4 items-center">
+        <div className="text-center">
+          <h2 className="text-lg font-black italic uppercase tracking-tighter text-gray-900">Leaders Profile</h2>
+          <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-gray-400 mt-1">Center Stage Performers</p>
+        </div>
+
+        {topLeaders.length > 0 ? (
+          <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
+            {topLeaders.map((leader, index) => (
+              <button
+                key={leader.id}
+                onClick={() => onPlayerClick(leader.id)}
+                className={`rounded-[2rem] border shadow-sm text-center transition-all hover:-translate-y-1 ${
+                  index === 0
+                    ? 'bg-black text-white border-black px-6 py-7 sm:-mt-3'
+                    : 'bg-white text-gray-900 border-gray-100 px-6 py-6'
+                }`}
+              >
+                <div className={`mx-auto h-20 w-20 rounded-[2rem] overflow-hidden border-4 ${index === 0 ? 'border-yellow-500' : 'border-yellow-100'}`}>
+                  <img
+                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${leader.id}`}
+                    alt={leader.name}
+                    className="h-full w-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <p className={`mt-4 text-[10px] font-black uppercase tracking-[0.24em] ${index === 0 ? 'text-yellow-500' : 'text-yellow-700'}`}>
+                  #{index + 1} Leader
+                </p>
+                <h3 className="mt-2 text-lg font-black italic uppercase tracking-tighter">{leader.name}</h3>
+                <p className={`mt-1 text-[10px] font-bold uppercase tracking-widest ${index === 0 ? 'text-white/60' : 'text-gray-400'}`}>
+                  {leader.role || 'Cricket Player'}
+                </p>
+                <div className={`mt-5 rounded-[1.5rem] px-4 py-3 ${index === 0 ? 'bg-yellow-500 text-black' : 'bg-yellow-50 text-gray-900 border border-yellow-100'}`}>
+                  <p className="text-[9px] font-black uppercase tracking-[0.22em]">Runs</p>
+                  <p className="mt-1 text-2xl font-black italic leading-none">{leader.stats?.runs || 0}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="w-full text-center py-10 bg-white rounded-[2.5rem] border border-dashed border-gray-200 shadow-sm">
+            <Trophy size={36} className="mx-auto text-gray-200 mb-3" />
+            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">Leaders stats aate hi yahan show honge</p>
+          </div>
+        )}
+      </div>
 
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-black italic uppercase tracking-tighter text-gray-900 flex items-center gap-2">
@@ -1168,6 +1237,209 @@ const Tournaments = ({ onCreateTournament, onTournamentClick }: { onCreateTourna
               </div>
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>; onMatchClick: (id: string) => void }) => {
+  const { user } = useAuth();
+  const [linkedPlayer, setLinkedPlayer] = useState<any>(null);
+  const [playerMatches, setPlayerMatches] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  useEffect(() => {
+    if (!user) {
+      setLinkedPlayer(null);
+      setPlayerMatches([]);
+      setLoadingHistory(false);
+      return;
+    }
+
+    let unsubscribeMatches: (() => void) | undefined;
+    const qByUid = query(collection(db, 'players'), where('createdBy', '==', user.uid), limit(1));
+
+    const unsubPlayer = onSnapshot(qByUid, (snap) => {
+      const connectPlayerHistory = (playerDoc: any) => {
+        if (!playerDoc) {
+          setLinkedPlayer(null);
+          setPlayerMatches([]);
+          setLoadingHistory(false);
+          return;
+        }
+
+        const playerData = { id: playerDoc.id, ...playerDoc.data() };
+        setLinkedPlayer(playerData);
+        setLoadingHistory(true);
+
+        if (unsubscribeMatches) {
+          unsubscribeMatches();
+        }
+
+        const qMatches = query(collection(db, 'matches'), orderBy('createdAt', 'desc'), limit(200));
+        unsubscribeMatches = onSnapshot(qMatches, (matchSnap) => {
+          const allMatches = matchSnap.docs.map((matchDoc) => ({ id: matchDoc.id, ...matchDoc.data() }));
+          setPlayerMatches(allMatches.filter((match: any) => Boolean(match.playerStats?.[playerData.id])));
+          setLoadingHistory(false);
+        }, (error) => {
+          handleFirestoreError(error, OperationType.GET, 'matches');
+          setLoadingHistory(false);
+        });
+      };
+
+      if (!snap.empty) {
+        connectPlayerHistory(snap.docs[0]);
+        return;
+      }
+
+      const fallbackQueries = [];
+      if (user.phoneNumber) {
+        fallbackQueries.push(getDocs(query(collection(db, 'players'), where('phoneNumber', '==', user.phoneNumber), limit(1))));
+      }
+      if (user.email) {
+        fallbackQueries.push(getDocs(query(collection(db, 'players'), where('email', '==', user.email), limit(1))));
+      }
+
+      if (fallbackQueries.length === 0) {
+        connectPlayerHistory(null);
+        return;
+      }
+
+      Promise.all(fallbackQueries).then((results) => {
+        const firstMatch = results.find((result) => !result.empty);
+        connectPlayerHistory(firstMatch ? firstMatch.docs[0] : null);
+      }).catch((error) => {
+        handleFirestoreError(error, OperationType.GET, 'players');
+        setLoadingHistory(false);
+      });
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'players');
+      setLoadingHistory(false);
+    });
+
+    return () => {
+      unsubPlayer();
+      if (unsubscribeMatches) {
+        unsubscribeMatches();
+      }
+    };
+  }, [user]);
+
+  const summary = {
+    matches: linkedPlayer?.stats?.matches || playerMatches.length,
+    runs: linkedPlayer?.stats?.runs || 0,
+    wickets: linkedPlayer?.stats?.wickets || 0,
+  };
+
+  return (
+    <div className="p-4 pb-24 flex flex-col gap-6">
+      <div className="bg-black text-white rounded-[2.5rem] p-6 sm:p-8 shadow-2xl text-center relative overflow-hidden">
+        <div className="absolute inset-x-0 top-0 h-28 bg-yellow-500" />
+        <div className="relative z-10 flex flex-col items-center">
+          <div className="h-24 w-24 rounded-[2rem] overflow-hidden border-4 border-white shadow-2xl mt-2">
+            <img
+              src={user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${linkedPlayer?.id || user?.uid || 'my-cricket'}`}
+              alt={user?.displayName || linkedPlayer?.name || 'My Cricket'}
+              className="h-full w-full object-cover bg-white"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          <p className="mt-5 text-[10px] font-black uppercase tracking-[0.24em] text-yellow-500">My Cricket</p>
+          <h2 className="mt-2 text-3xl font-black italic uppercase tracking-tighter">
+            {linkedPlayer?.name || user?.displayName || 'Player Profile'}
+          </h2>
+          <p className="mt-2 text-xs font-bold uppercase tracking-widest text-white/60">
+            {linkedPlayer?.role || 'Linked cricket profile'}
+          </p>
+          <div className="mt-6 grid grid-cols-3 gap-3 w-full">
+            <div className="rounded-2xl bg-white/10 px-3 py-4">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/50">Matches</p>
+              <p className="mt-1 text-2xl font-black italic">{summary.matches}</p>
+            </div>
+            <div className="rounded-2xl bg-white/10 px-3 py-4">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/50">Runs</p>
+              <p className="mt-1 text-2xl font-black italic">{summary.runs}</p>
+            </div>
+            <div className="rounded-2xl bg-white/10 px-3 py-4">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/50">Wickets</p>
+              <p className="mt-1 text-2xl font-black italic">{summary.wickets}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-black italic uppercase tracking-tighter text-gray-900">Full Match History</h3>
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gray-400 mt-1">
+            Logged-in player ne jitne matches khele sab yahan dikhenge
+          </p>
+        </div>
+      </div>
+
+      {loadingHistory ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : !linkedPlayer ? (
+        <div className="bg-white p-8 rounded-[2rem] border border-dashed border-gray-200 text-center">
+          <p className="text-sm font-black uppercase tracking-widest text-gray-500">Player profile link nahi mila</p>
+          <p className="text-xs font-bold text-gray-400 mt-3">Phone ya email linked player milte hi yahin automatic history show ho jayegi.</p>
+        </div>
+      ) : playerMatches.length === 0 ? (
+        <div className="bg-white p-10 rounded-[2rem] border border-dashed border-gray-200 text-center">
+          <History size={38} className="mx-auto text-gray-200 mb-3" />
+          <p className="text-sm font-black uppercase tracking-widest text-gray-500">Abhi koi match history nahi mili</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {playerMatches.map((match: any) => {
+            const playerMatch = match.playerStats?.[linkedPlayer.id];
+            const teamAName = teams[match.teamA]?.name || 'Team A';
+            const teamBName = teams[match.teamB]?.name || 'Team B';
+            return (
+              <button
+                key={match.id}
+                onClick={() => onMatchClick(match.id)}
+                className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm text-left hover:border-yellow-200 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-yellow-700">
+                      {match.status === 'live' ? 'Live Match' : 'Completed Match'}
+                    </p>
+                    <h4 className="mt-2 text-lg font-black italic uppercase tracking-tighter text-gray-900">
+                      {teamAName} vs {teamBName}
+                    </h4>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                      {linkedPlayer.name} performance
+                    </p>
+                  </div>
+                  <ChevronRight size={18} className="text-gray-300 shrink-0 mt-1" />
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-2xl bg-yellow-50 border border-yellow-100 px-3 py-3">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-yellow-700">Runs</p>
+                    <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.runs || 0}</p>
+                  </div>
+                  <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Balls</p>
+                    <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.balls || 0}</p>
+                  </div>
+                  <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Wickets</p>
+                    <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.wickets || 0}</p>
+                  </div>
+                  <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Runs Given</p>
+                    <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.runsConceded || 0}</p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -1889,7 +2161,7 @@ const MainContent = () => {
     };
 
     switch (activeTab) {
-      case 'home': return <Home onStartMatch={() => setView('start-match')} onMatchClick={handleMatchClick} matches={matches} recentMatches={recentMatches} globalMatches={globalMatches} teams={teams} tournaments={tournaments} userTeamIds={userTeamIds} />;
+      case 'home': return <Home onStartMatch={() => setView('start-match')} onMatchClick={handleMatchClick} onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }} matches={matches} recentMatches={recentMatches} globalMatches={globalMatches} teams={teams} tournaments={tournaments} userTeamIds={userTeamIds} />;
       case 'teams': return (
         <Teams 
           onCreateTeam={() => setView('create-team')} 
@@ -1898,16 +2170,18 @@ const MainContent = () => {
           onTeamClick={(id) => { setActiveMatchId(id); setView('teamDetails'); }}
         />
       );
+      case 'myCricket': return <MyCricket teams={teams} onMatchClick={handleMatchClick} />;
       case 'tournaments': return <Tournaments onCreateTournament={() => setView('create-tournament')} onTournamentClick={(id) => { setActiveTournamentId(id); setView('tournamentDetails'); }} />;
       case 'leaderboard': return <Leaderboard onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }} />;
       case 'profile': return <Profile />;
-      default: return <Home onStartMatch={() => setView('start-match')} onMatchClick={handleMatchClick} matches={matches} recentMatches={recentMatches} globalMatches={globalMatches} teams={teams} tournaments={tournaments} userTeamIds={userTeamIds} />;
+      default: return <Home onStartMatch={() => setView('start-match')} onMatchClick={handleMatchClick} onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }} matches={matches} recentMatches={recentMatches} globalMatches={globalMatches} teams={teams} tournaments={tournaments} userTeamIds={userTeamIds} />;
     }
   };
 
   const titles: Record<string, string> = {
     home: 'Score Wala',
     teams: 'My Teams',
+    myCricket: 'My Cricket',
     tournaments: 'Tournaments',
     leaderboard: 'Leaderboard',
     profile: 'My Profile',
@@ -1951,7 +2225,7 @@ const MainContent = () => {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
-                <MenuLink icon={History} label="Match History" onClick={() => { setView('history'); setIsMenuOpen(false); }} />
+                <MenuLink icon={History} label="Match History" onClick={() => { setActiveTab('myCricket'); setIsMenuOpen(false); }} />
                 <MenuLink icon={Users} label="My Teams" onClick={() => { setActiveTab('teams'); setIsMenuOpen(false); }} />
                 <MenuLink icon={Trophy} label="My Tournaments" onClick={() => { setActiveTab('tournaments'); setIsMenuOpen(false); }} />
                 <button

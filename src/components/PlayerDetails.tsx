@@ -11,6 +11,7 @@ export const PlayerDetails = ({ playerId, onBack, onMatchClick }: {
 }) => {
   const [player, setPlayer] = useState<Player | null>(null);
   const [recentMatches, setRecentMatches] = useState<any[]>([]);
+  const [teamNames, setTeamNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,15 +24,20 @@ export const PlayerDetails = ({ playerId, onBack, onMatchClick }: {
       handleFirestoreError(error, OperationType.GET, `players/${playerId}`);
     });
 
-    // Fetch recent matches where this player participated
-    // This is complex because player IDs are inside match.playerStats map keys
-    // For now, we'll fetch matches created by the same user or just general matches
-    // A better way would be a separate collection 'player_matches'
-    const q = query(collection(db, 'matches'), orderBy('createdAt', 'desc'), limit(5));
+    // Fetch match history for this player. We filter client-side because player IDs live in match.playerStats map keys.
+    const q = query(collection(db, 'matches'), orderBy('createdAt', 'desc'), limit(100));
     const unsubMatches = onSnapshot(q, (snap) => {
       const matches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Filter matches where player participated (client side for now)
-      setRecentMatches(matches.filter(m => (m as any).playerStats?.[playerId]));
+      const playerHistory = matches.filter(m => (m as any).playerStats?.[playerId]);
+      setRecentMatches(playerHistory);
+
+      const uniqueTeamIds = Array.from(new Set(playerHistory.flatMap((match: any) => [match.teamA, match.teamB])));
+      Promise.all(uniqueTeamIds.map(async (teamId) => {
+        const teamSnap = await getDoc(doc(db, 'teams', teamId));
+        return { teamId, name: teamSnap.exists() ? teamSnap.data().name : 'Team' };
+      })).then((resolvedTeams) => {
+        setTeamNames(Object.fromEntries(resolvedTeams.map((team) => [team.teamId, team.name])));
+      });
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'matches');
     });
@@ -166,15 +172,35 @@ export const PlayerDetails = ({ playerId, onBack, onMatchClick }: {
                 whileTap={{ scale: 0.98 }}
                 key={match.id}
                 onClick={() => onMatchClick(match.id)}
-                className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center justify-between group"
+                className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center justify-between group text-left"
               >
-                <div className="flex flex-col gap-1 text-left">
-                  <h4 className="font-black italic uppercase tracking-tighter text-gray-900">
-                    {match.playerStats[playerId].runs} ({match.playerStats[playerId].balls})
-                  </h4>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                    vs {match.teamA === player.id ? 'Opponent' : 'Opponent'}
-                  </p>
+                <div className="flex flex-col gap-4 text-left flex-1">
+                  <div className="flex flex-col gap-1">
+                    <p className="text-[10px] font-black text-yellow-700 uppercase tracking-[0.2em]">
+                      {match.status === 'live' ? 'Live Match' : 'Completed Match'}
+                    </p>
+                    <h4 className="font-black italic uppercase tracking-tighter text-gray-900">
+                      {teamNames[match.teamA] || 'Team A'} vs {teamNames[match.teamB] || 'Team B'}
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-2xl bg-yellow-50 border border-yellow-100 px-3 py-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-yellow-700">Runs</p>
+                      <p className="mt-1 text-xl font-black italic text-gray-900">{match.playerStats[playerId].runs}</p>
+                    </div>
+                    <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Balls</p>
+                      <p className="mt-1 text-xl font-black italic text-gray-900">{match.playerStats[playerId].balls}</p>
+                    </div>
+                    <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Wickets</p>
+                      <p className="mt-1 text-xl font-black italic text-gray-900">{match.playerStats[playerId].wickets}</p>
+                    </div>
+                    <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Runs Given</p>
+                      <p className="mt-1 text-xl font-black italic text-gray-900">{match.playerStats[playerId].runsConceded}</p>
+                    </div>
+                  </div>
                 </div>
                 <ChevronRight size={18} className="text-gray-200 group-hover:text-yellow-500 transition-colors" />
               </motion.button>
