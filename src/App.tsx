@@ -41,8 +41,13 @@ const AuthContext = createContext<{
 const useAuth = () => useContext(AuthContext);
 
 const THEME_STORAGE_KEY = 'scorewala-theme';
+const WELCOME_SESSION_KEY_PREFIX = 'scorewala-welcome-shown';
 const MAX_PROFILE_IMAGE_DIMENSION = 512;
 const PROFILE_IMAGE_QUALITY = 0.82;
+
+function getWelcomeSessionKey(uid: string) {
+  return `${WELCOME_SESSION_KEY_PREFIX}:${uid}`;
+}
 
 async function fileToDataUrl(file: File) {
   return await new Promise<string>((resolve, reject) => {
@@ -1486,7 +1491,6 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               email: firebaseUser.email || '',
               photoURL: firebaseUser.photoURL || '',
               role: 'user',
-              showWelcome: true,
             };
             await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
             setUser(newUser);
@@ -1529,6 +1533,10 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     try {
+      const currentUser = auth.currentUser;
+      if (currentUser?.uid) {
+        sessionStorage.removeItem(getWelcomeSessionKey(currentUser.uid));
+      }
       await logOut();
     } catch (error) {
       console.error('Logout failed', error);
@@ -1561,9 +1569,6 @@ const WelcomeModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
           <div className="bg-yellow-500 p-8 rounded-[3rem] shadow-2xl text-center flex flex-col items-center gap-6 max-w-xs w-full border-4 border-black">
             <div className="w-28 h-28 rounded-[2rem] overflow-hidden border-4 border-black shadow-2xl">
               <img src="/haris-photo.jpeg" alt="Md Haris" className="w-full h-full object-cover" />
-            </div>
-            <div className="w-24 h-24 bg-black rounded-[2.5rem] flex items-center justify-center shadow-2xl rotate-12">
-              <Trophy size={48} className="text-yellow-500 -rotate-12" />
             </div>
             <div className="flex flex-col gap-2">
               <h2 className="text-4xl font-black italic uppercase tracking-tighter text-black leading-none">Score Wala</h2>
@@ -1600,25 +1605,22 @@ const MainContent = () => {
   const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
-    if (user?.showWelcome) {
-      setShowWelcome(true);
+    if (!user?.uid) {
+      setShowWelcome(false);
       return;
     }
-    setShowWelcome(false);
-  }, [user]);
 
-  const handleCloseWelcome = async () => {
-    setShowWelcome(false);
-    if (!user?.showWelcome) return;
+    const welcomeSessionKey = getWelcomeSessionKey(user.uid);
+    const hasShownWelcome = sessionStorage.getItem(welcomeSessionKey) === 'true';
 
-    try {
-      await setDoc(doc(db, 'users', user.uid), {
-        ...user,
-        showWelcome: false,
-      });
-    } catch (error) {
-      console.error('Failed to update welcome state', error);
+    if (!hasShownWelcome) {
+      sessionStorage.setItem(welcomeSessionKey, 'true');
+      setShowWelcome(true);
     }
+  }, [user?.uid]);
+
+  const handleCloseWelcome = () => {
+    setShowWelcome(false);
   };
 
   useEffect(() => {

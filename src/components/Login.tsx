@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, signIn, db, doc, setDoc, getDoc, RecaptchaVerifier, signInWithPhoneNumber } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Phone, Mail, ArrowRight, CheckCircle2, Trophy, ShieldCheck } from 'lucide-react';
+import { Phone, Mail, ArrowRight, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { UserProfile } from '../types';
 
 async function waitForRecaptchaContainer(attempts = 10) {
@@ -128,7 +128,6 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
           phoneNumber: user.phoneNumber || '',
           photoURL: user.photoURL || '',
           role: 'user',
-          showWelcome: true,
         };
         await setDoc(doc(db, 'users', user.uid), newUser);
       }
@@ -143,8 +142,8 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 gap-12">
       <div className="text-center flex flex-col gap-4">
-        <div className="w-24 h-24 bg-yellow-500 rounded-[2.5rem] flex items-center justify-center mx-auto shadow-2xl rotate-12">
-          <Trophy size={48} className="text-black -rotate-12" />
+        <div className="w-40 rounded-full overflow-hidden border-4 border-black bg-[#0f2f24] mx-auto shadow-2xl aspect-square ring-4 ring-yellow-200/70">
+          <img src="/scorewala-login-logo.jpg" alt="Score Wala logo" className="w-full h-full object-cover scale-110" />
         </div>
         <h1 className="text-4xl font-black italic uppercase tracking-tighter text-gray-900 mt-4">Score Wala</h1>
         <p className="text-gray-500 font-medium max-w-xs mx-auto">
