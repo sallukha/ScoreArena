@@ -978,7 +978,7 @@ const Home = ({ onStartMatch, onMatchClick, matches, recentMatches, globalMatche
         className="fixed bottom-24 right-6 w-20 h-20 bg-yellow-500 rounded-[2rem] shadow-2xl flex flex-col items-center justify-center text-black z-40 border-4 border-white rotate-12"
       >
         <div className="absolute -top-2 -right-2 bg-black text-white text-[10px] font-black px-2 py-1 rounded-full border-2 border-white">
-          ₹25
+          FREE
         </div>
         <PlusCircle size={28} className="-rotate-12" />
         <span className="text-[10px] font-black uppercase tracking-tighter leading-none mt-1 -rotate-12">
@@ -1486,6 +1486,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               email: firebaseUser.email || '',
               photoURL: firebaseUser.photoURL || '',
               role: 'user',
+              showWelcome: true,
             };
             await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
             setUser(newUser);
@@ -1558,6 +1559,9 @@ const WelcomeModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
           className="fixed inset-0 flex items-center justify-center z-[210] p-6"
         >
           <div className="bg-yellow-500 p-8 rounded-[3rem] shadow-2xl text-center flex flex-col items-center gap-6 max-w-xs w-full border-4 border-black">
+            <div className="w-28 h-28 rounded-[2rem] overflow-hidden border-4 border-black shadow-2xl">
+              <img src="/haris-photo.jpeg" alt="Md Haris" className="w-full h-full object-cover" />
+            </div>
             <div className="w-24 h-24 bg-black rounded-[2.5rem] flex items-center justify-center shadow-2xl rotate-12">
               <Trophy size={48} className="text-yellow-500 -rotate-12" />
             </div>
@@ -1596,10 +1600,26 @@ const MainContent = () => {
   const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
-    if (user) {
+    if (user?.showWelcome) {
       setShowWelcome(true);
+      return;
     }
+    setShowWelcome(false);
   }, [user]);
+
+  const handleCloseWelcome = async () => {
+    setShowWelcome(false);
+    if (!user?.showWelcome) return;
+
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        ...user,
+        showWelcome: false,
+      });
+    } catch (error) {
+      console.error('Failed to update welcome state', error);
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -1986,7 +2006,7 @@ const MainContent = () => {
         </AnimatePresence>
       </main>
       {view === 'main' && <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />}
-      <WelcomeModal isOpen={showWelcome} onClose={() => setShowWelcome(false)} />
+      <WelcomeModal isOpen={showWelcome} onClose={handleCloseWelcome} />
 
       <NotificationList 
         isOpen={isNotificationsOpen}

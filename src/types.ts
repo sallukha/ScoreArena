@@ -5,6 +5,7 @@ export interface UserProfile {
   phoneNumber?: string;
   photoURL?: string;
   role: 'user' | 'admin';
+  showWelcome?: boolean;
 }
 
 export interface Player {

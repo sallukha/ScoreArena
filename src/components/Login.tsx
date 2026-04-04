@@ -128,6 +128,7 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
           phoneNumber: user.phoneNumber || '',
           photoURL: user.photoURL || '',
           role: 'user',
+          showWelcome: true,
         };
         await setDoc(doc(db, 'users', user.uid), newUser);
       }
@@ -279,6 +280,11 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
         </div>
 
         <div className="mt-12 text-center">
+          <img
+            src="/haris-photo.jpeg"
+            alt="Md Haris"
+            className="w-20 h-20 rounded-[1.5rem] object-cover mx-auto mb-3 border-4 border-yellow-100 shadow-lg"
+          />
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Developed by</p>
           <p className="text-xl font-black italic uppercase tracking-tighter text-gray-900 mt-1">Md Haris</p>
         </div>
