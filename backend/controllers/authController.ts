@@ -82,19 +82,15 @@ export async function getUser(req: Request, res: Response) {
   if (!req.authUser) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-
   if (req.authUser.uid !== req.params.uid && req.authUser.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden' });
   }
-
   const user = await (UserModel as any).findById(req.params.uid).lean();
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
-
   return res.json(sanitizeUser(user));
 }
-
 export async function googleLogin(req: Request, res: Response) {
   const { displayName, email, photoURL, googleId } = req.body || {};
   const safeEmail = String(email || '').trim().toLowerCase();
