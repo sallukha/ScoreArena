@@ -1,0 +1,9 @@
+{
+  "name": "ScoreArena",
+  "description": "ScoreArena - A live cricket scoring app with Razorpay payment integration.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
