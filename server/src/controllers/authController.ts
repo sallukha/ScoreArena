@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
-import { getFirebaseAdminAuth } from '../config/firebaseAdmin';
-import { logger } from '../config/logger';
-import { UserModel } from '../models/User';
-import { createAccessToken } from '../utils/jwt';
+import { getFirebaseAdminAuth } from '../config/firebaseAdmin.js';
+import { logger } from '../config/logger.js';
+import { UserModel } from '../models/User.js';
+import { createAccessToken } from '../utils/jwt.js';
 
 function normalizePhoneNumber(input: string) {
   const trimmed = String(input || '').trim();

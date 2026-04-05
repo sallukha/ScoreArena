@@ -6,8 +6,8 @@ import {
   queryDocumentsByPath,
   setDocumentByPath,
   updateDocumentByPath,
-} from '../services/dataService';
-import type { SocketHub } from '../realtime/socketHub';
+} from '../services/dataService.js';
+import type { SocketHub } from '../realtime/socketHub.js';
 
 let socketHub: SocketHub | null = null;
 

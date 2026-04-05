@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { env } from '../config/env';
-import { logger } from '../config/logger';
+import { env } from '../config/env.js';
+import { logger } from '../config/logger.js';
 
 function normalizeArticles(payload: any) {
   const sourceArticles = Array.isArray(payload?.articles)

@@ -1,5 +1,5 @@
-import { getPathMeta } from '../utils/pathResolver';
-import { applyPatchedUpdate, normalizePayload } from '../utils/updateOperators';
+import { getPathMeta } from '../utils/pathResolver.js';
+import { applyPatchedUpdate, normalizePayload } from '../utils/updateOperators.js';
 
 export type QueryConstraint =
   | { type: 'where'; field: string; op: string; value: any }

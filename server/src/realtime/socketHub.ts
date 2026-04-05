@@ -1,12 +1,12 @@
 import type { Server as HttpServer } from 'http';
 import type { Socket } from 'socket.io';
 import { Server } from 'socket.io';
-import { verifyAccessToken } from '../utils/jwt';
+import { verifyAccessToken } from '../utils/jwt.js';
 import {
   getDocumentByPath,
   queryDocumentsByPath,
   type QueryConstraint,
-} from '../services/dataService';
+} from '../services/dataService.js';
 
 type SubscriptionDescriptor = {
   id: string;

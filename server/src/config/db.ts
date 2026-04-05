@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import { env } from './env';
-import { logger } from './logger';
+import { env } from './env.js';
+import { logger } from './logger.js';
 let isConnected = false;
 let lastConnectionError: string | null = null;
 function sanitizeMongoUri(uri: string) {

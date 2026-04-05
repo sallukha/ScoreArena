@@ -6,8 +6,8 @@ import {
   queryDocuments,
   setDocument,
   updateDocument,
-} from '../controllers/dataController';
-import { requireAuth } from '../middleware/auth';
+} from '../controllers/dataController.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export const dataRoutes = Router();
 

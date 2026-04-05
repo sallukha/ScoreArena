@@ -2,14 +2,14 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import http from 'http';
-import { connectDatabase, disconnectDatabase, getDatabaseHealth } from './config/db';
-import { env, getAllowedOrigins } from './config/env';
-import { logger, requestLogger } from './config/logger';
-import { registerSocketHub } from './controllers/dataController';
-import { createSocketHub } from './realtime/socketHub';
-import { authRoutes } from './routes/authRoutes';
-import { dataRoutes } from './routes/dataRoutes';
-import { newsRoutes } from './routes/newsRoutes';
+import { connectDatabase, disconnectDatabase, getDatabaseHealth } from './config/db.js';
+import { env, getAllowedOrigins } from './config/env.js';
+import { logger, requestLogger } from './config/logger.js';
+import { registerSocketHub } from './controllers/dataController.js';
+import { createSocketHub } from './realtime/socketHub.js';
+import { authRoutes } from './routes/authRoutes.js';
+import { dataRoutes } from './routes/dataRoutes.js';
+import { newsRoutes } from './routes/newsRoutes.js';
 
 async function startServer() {
   await connectDatabase();
