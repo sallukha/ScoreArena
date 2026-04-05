@@ -413,21 +413,62 @@ async function signInWithGoogleOAuth() {
 }
 
 async function exchangeFirebaseSession(firebaseUser: any) {
-  const idToken = await firebaseUser.getIdToken();
-  const result = await apiFetch<{ user: AuthUser; token: string }>('/auth/firebase', {
-    method: 'POST',
-    body: JSON.stringify({
-      idToken,
-      displayName: firebaseUser.displayName || '',
-      email: firebaseUser.email || '',
-      phoneNumber: firebaseUser.phoneNumber || '',
-      photoURL: firebaseUser.photoURL || '',
-    }),
-  });
+  try {
+    console.log('Exchanging Firebase session for user:', firebaseUser.phoneNumber);
+    
+    const idToken = await firebaseUser.getIdToken();
+    console.log('Firebase ID token obtained');
+    
+    const result = await apiFetch<{ user: AuthUser; token: string }>('/auth/firebase', {
+      method: 'POST',
+      body: JSON.stringify({
+        idToken,
+        displayName: firebaseUser.displayName || '',
+        email: firebaseUser.email || '',
+        phoneNumber: firebaseUser.phoneNumber || '',
+        photoURL: firebaseUser.photoURL || '',
+      }),
+    });
 
-  setCurrentUser(result.user, result.token);
-  return { user: authStore.currentUser };
+    console.log('Backend auth response received, storing session');
+    setCurrentUser(result.user, result.token);
+    console.log('User session stored successfully');
+    
+    return { user: authStore.currentUser };
+  } catch (error) {
+    console.error('Firebase session exchange failed:', error);
+    throw error;
+  }
 }
+
+export const signInWithPhoneNumber = async (
+  _authInstance: typeof auth,
+  phoneNumber: string,
+  verifier: any
+) => {
+  console.log('Initiating phone sign-in for:', phoneNumber);
+  
+  const confirmationResult = await firebaseSignInWithPhoneNumber(firebaseAuth, phoneNumber, verifier);
+  console.log('OTP sent successfully');
+
+  return {
+    confirm: async (otp: string) => {
+      try {
+        console.log('Confirming OTP...');
+        const result = await confirmationResult.confirm(otp);
+        console.log('OTP confirmed by Firebase');
+        
+        const authResult = await exchangeFirebaseSession(result.user);
+        console.log('Phone authentication completed successfully');
+        
+        return authResult;
+      } catch (error) {
+        console.error('OTP confirmation failed:', error);
+        throw error;
+      }
+    },
+  };
+};
 
 export const signIn = async () => {
   return signInWithGoogleOAuth();
@@ -451,21 +492,6 @@ export class RecaptchaVerifier {
 }
 
 export const PhoneAuthProvider = {};
-
-export const signInWithPhoneNumber = async (
-  _authInstance: typeof auth,
-  phoneNumber: string,
-  verifier: any
-) => {
-  const confirmationResult = await firebaseSignInWithPhoneNumber(firebaseAuth, phoneNumber, verifier);
-
-  return {
-    confirm: async (otp: string) => {
-      const result = await confirmationResult.confirm(otp);
-      return exchangeFirebaseSession(result.user);
-    },
-  };
-};
 
 export enum OperationType {
   CREATE = 'create',

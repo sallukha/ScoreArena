@@ -139,12 +139,14 @@ export async function googleLogin(req: Request, res: Response) {
 export async function firebaseLogin(req: Request, res: Response) {
   const idToken = String(req.body?.idToken || '').trim();
   if (!idToken) {
+    logger.warn('Firebase login attempt without token');
     return res.status(400).json({ error: 'Firebase ID token is required' });
   }
 
   let firebaseUser: any;
   try {
     firebaseUser = await lookupFirebaseUser(idToken);
+    logger.info('Firebase token verified successfully', { uid: firebaseUser?.localId });
   } catch (error) {
     logger.warn('Firebase token verification failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -156,26 +158,39 @@ export async function firebaseLogin(req: Request, res: Response) {
 
   const phoneNumber = normalizePhoneNumber(req.body?.phoneNumber || firebaseUser.phoneNumber || '');
   if (!phoneNumber) {
-    return res.status(400).json({ error: 'Firebase phone number is missing' });
+    logger.warn('Firebase login attempted without phone number', { userUid: firebaseUser?.localId });
+    return res.status(400).json({ error: 'Phone number is required for phone authentication' });
   }
 
   const uid = `phone_${phoneNumber.replace(/[^0-9]/g, '')}`;
 
-  const user = await (UserModel as any).findByIdAndUpdate(
-    uid,
-    {
-      _id: uid,
+  try {
+    const user = await (UserModel as any).findByIdAndUpdate(
       uid,
-      displayName:
-        String(req.body?.displayName || firebaseUser.displayName || '').trim() || `User_${phoneNumber.slice(-4)}`,
-      email: String(req.body?.email || firebaseUser.email || '').trim().toLowerCase(),
-      phoneNumber,
-      photoURL: String(req.body?.photoURL || firebaseUser.photoUrl || '').trim(),
-      authProvider: 'phone',
-      role: 'user',
-    },
-    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
-  );
+      {
+        _id: uid,
+        uid,
+        displayName:
+          String(req.body?.displayName || firebaseUser.displayName || '').trim() || `User_${phoneNumber.slice(-4)}`,
+        email: String(req.body?.email || firebaseUser.email || '').trim().toLowerCase(),
+        phoneNumber,
+        photoURL: String(req.body?.photoURL || firebaseUser.photoUrl || '').trim(),
+        authProvider: 'phone',
+        role: 'user',
+      },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
+    );
 
-  return res.json(buildAuthResponse(user));
+    logger.info('User logged in via phone', { uid, phoneNumber });
+    return res.json(buildAuthResponse(user));
+  } catch (error) {
+    logger.error('Database error during phone login', {
+      error: error instanceof Error ? error.message : String(error),
+      uid,
+      phoneNumber,
+    });
+    return res.status(500).json({
+      error: 'Failed to create or update user. Please try again.',
+    });
+  }
 }

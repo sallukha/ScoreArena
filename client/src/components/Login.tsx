@@ -20,8 +20,13 @@ async function waitForRecaptchaContainer(attempts = 10) {
 }
 
 function resetRecaptchaVerifier() {
-  if (window.recaptchaVerifier?.clear) {
-    window.recaptchaVerifier.clear();
+  console.log('Resetting reCAPTCHA verifier');
+  try {
+    if (window.recaptchaVerifier?.clear) {
+      window.recaptchaVerifier.clear();
+    }
+  } catch (err) {
+    console.warn('Error clearing reCAPTCHA:', err);
   }
   window.recaptchaVerifier = null;
 }
@@ -29,17 +34,25 @@ function resetRecaptchaVerifier() {
 async function ensureRecaptchaVerifier() {
   const container = await waitForRecaptchaContainer();
   if (!container) {
-    throw new Error('reCAPTCHA load nahi hua. Page refresh karke dobara try karo.');
+    throw new Error('reCAPTCHA container not found. Page refresh karke dobara try karo.');
   }
 
-  if (!window.recaptchaVerifier) {
-    window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-      size: 'normal',
-      callback: () => {
-        console.log('Recaptcha verified');
-      },
-    });
+  // Don't recreate if already exists
+  if (window.recaptchaVerifier) {
+    console.log('Using existing reCAPTCHA verifier');
+    return window.recaptchaVerifier;
   }
+
+  console.log('Creating new reCAPTCHA verifier');
+  window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+    size: 'normal',
+    callback: () => {
+      console.log('Recaptcha verified successfully');
+    },
+    'expired-callback': () => {
+      console.log('reCAPTCHA expired, will need to reverify');
+    },
+  });
 
   return window.recaptchaVerifier;
 }
@@ -52,6 +65,15 @@ function getFirebaseAuthMessage(err: any) {
       err?.message ||
       ''
   );
+
+  // Check for reCAPTCHA specific errors
+  if (rawMessage.includes('reCAPTCHA') || code.includes('captcha')) {
+    return 'reCAPTCHA issue. Page ko refresh karke dobara try karo ya Firefox use karo.';
+  }
+  
+  if (rawMessage.includes('element has been removed')) {
+    return 'reCAPTCHA widget removed. Page refresh karke try karo.';
+  }
 
   switch (code) {
     case 'auth/operation-not-allowed':
@@ -80,6 +102,37 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Cleanup reCAPTCHA when component unmounts
+  useEffect(() => {
+    return () => {
+      console.log('Login component unmounting, cleaning up reCAPTCHA');
+      resetRecaptchaVerifier();
+    };
+  }, []);
+
+  // Reset reCAPTCHA verifier when switching away from phone method
+  useEffect(() => {
+    if (method !== 'phone') {
+      console.log('Switched away from phone method, resetting reCAPTCHA');
+      resetRecaptchaVerifier();
+      // Reset phone login state when switching methods
+      setPhoneNumber('');
+      setOtp('');
+      setStep('phone');
+      setConfirmationResult(null);
+      setError(null);
+    }
+  }, [method]);
+
+  // Reset phone state when switching back to phone from OTP step
+  const handleChangeNumber = () => {
+    console.log('User requested to change phone number');
+    setStep('phone');
+    setOtp('');
+    setError(null);
+    // Don't reset the verifier yet - they might want to reuse it
+  };
+
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
@@ -98,13 +151,26 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
     setLoading(true);
     setError(null);
     try {
-      const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+91${phoneNumber}`;
+      console.log('Starting OTP send flow');
+      
+      // Ensure verifier is ready before attempting to send OTP
       const verifier = await ensureRecaptchaVerifier();
+      console.log('reCAPTCHA verifier ready');
+      
+      const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+91${phoneNumber}`;
+      console.log('Attempting to sign in with phone:', formattedPhone);
+      
       const confirmation = await signInWithPhoneNumber(auth, formattedPhone, verifier);
+      console.log('OTP request successful, waiting for user confirmation');
+      
       setConfirmationResult(confirmation);
       setStep('otp');
+      setError(null);
     } catch (err: any) {
+      console.error('OTP send error:', err);
       setError(getFirebaseAuthMessage(err));
+      // Reset verifier on error so it can be retried
+      resetRecaptchaVerifier();
     } finally {
       setLoading(false);
     }
@@ -115,24 +181,19 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await confirmationResult.confirm(otp);
-      const user = result.user;
+      console.log('Verifying OTP');
       
-      // Check if user doc exists
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (!userDoc.exists()) {
-        const newUser: UserProfile = {
-          uid: user.uid,
-          displayName: user.displayName || `User_${user.uid.slice(0, 5)}`,
-          email: user.email || '',
-          phoneNumber: user.phoneNumber || '',
-          photoURL: user.photoURL || '',
-          role: 'user',
-        };
-        await setDoc(doc(db, 'users', user.uid), newUser);
-      }
+      // Confirm OTP and exchange Firebase token with backend
+      const authResult = await confirmationResult.confirm(otp);
+      
+      console.log('OTP verified successfully:', authResult.user.uid);
+      
+      // Clean up reCAPTCHA after successful login
+      resetRecaptchaVerifier();
+      
       onLoginSuccess();
     } catch (err: any) {
+      console.error('OTP verification error:', err);
       setError(getFirebaseAuthMessage(err) || 'Invalid OTP. Please try again.');
     } finally {
       setLoading(false);
@@ -230,7 +291,7 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
                   <div className="text-center mb-2">
                     <p className="text-sm text-gray-500">OTP sent to <span className="font-bold text-black">+91 {phoneNumber}</span></p>
                     <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-2">Firebase verification in progress</p>
-                    <button onClick={() => setStep('phone')} className="text-yellow-600 text-xs font-bold uppercase mt-1">Change Number</button>
+                    <button onClick={handleChangeNumber} className="text-yellow-600 text-xs font-bold uppercase mt-1">Change Number</button>
                   </div>
                   <input
                     type="text"
@@ -259,10 +320,15 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
           )}
         </AnimatePresence>
 
+        {/* reCAPTCHA container - keep in DOM always, just hide visually when not needed */}
         <div
-          className={`rounded-2xl border border-gray-200 bg-gray-50 p-3 transition-all ${
-            method === 'phone' ? 'block' : 'hidden'
+          className={`rounded-2xl border border-gray-200 bg-gray-50 p-3 transition-all overflow-hidden ${
+            method === 'phone' ? 'block min-h-[78px]' : 'hidden h-0'
           }`}
+          style={{
+            visibility: method === 'phone' ? 'visible' : 'hidden',
+            pointerEvents: method === 'phone' ? 'auto' : 'none',
+          }}
         >
           <div id="recaptcha-container" className="min-h-[78px] overflow-hidden"></div>
         </div>
