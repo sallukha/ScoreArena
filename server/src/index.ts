@@ -109,9 +109,18 @@ async function startServer() {
 }
 
 startServer().catch((error) => {
-  logger.error('Failed to start server', {
-    error: error instanceof Error ? error.message : String(error),
-    stack: error instanceof Error ? error.stack : undefined,
-  });
+  // Log to console directly for Render visibility
+  // eslint-disable-next-line no-console
+  console.error('Failed to start server:', error);
+  try {
+    logger.error('Failed to start server', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+  } catch (e) {
+    // If logger setup fails, print that too
+    // eslint-disable-next-line no-console
+    console.error('Logger failed:', e);
+  }
   process.exit(1);
 });
