@@ -7,10 +7,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const serverRoot = path.resolve(__dirname, '../..');
 
-for (const envFile of ['.env.local', '.env']) {
-  const candidate = path.join(serverRoot, envFile);
-  if (fs.existsSync(candidate)) {
-    loadEnv({ path: candidate, override: envFile === '.env.local' });
+ if (process.env.NODE_ENV !== 'production') {
+  for (const envFile of ['.env.local', '.env']) {
+    const candidate = path.join(serverRoot, envFile);
+    if (fs.existsSync(candidate)) {
+      loadEnv({ path: candidate, override: envFile === '.env.local' });
+    }
   }
 }
 
