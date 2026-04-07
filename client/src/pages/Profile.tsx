@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { LogOut } from 'lucide-react';
 import { db, doc, getDocs, setDoc, query, collection, where, onSnapshot, limit } from '../firebase';
-import { optimizeProfileImage } from '../utils/imageUtils';
+import { optimizeProfileImage } from '../lib/imageUtils';
 import { useAuth } from '../contexts/AuthContext';
 import { StatBox } from '../components/ui/StatBox';
 

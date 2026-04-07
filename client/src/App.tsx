@@ -18,7 +18,7 @@ import { PlayerDetails } from './components/PlayerDetails';
 import { NotificationList } from './components/NotificationList';
 import { TeamDetails } from './components/TeamDetails';
 import { TournamentDetails } from './components/TournamentDetails';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useAuth } from './contexts/AuthContext';
 import { useLiveMatches } from './hooks/useLiveMatches';
 import { useUserCricketData } from './hooks/useUserCricketData';
 import { useTournaments } from './hooks/useTournaments';
@@ -27,7 +27,6 @@ import { Navbar as NavbarUI } from './components/ui/Navbar';
 import { Header as HeaderUI } from './components/ui/Header';
 import { MenuLink as MenuLinkUI } from './components/ui/MenuLink';
 import { WelcomeModal as WelcomeModalUI } from './components/ui/WelcomeModal';
-import { ErrorBoundary as ErrorBoundaryUI } from './components/ui/ErrorBoundary';
 import { MatchCard as MatchCardUI } from './components/ui/MatchCard';
 import { Home as HomePage } from './pages/Home';
 import { Teams as TeamsPage } from './pages/Teams';
@@ -355,11 +354,5 @@ const MainContent = () => {
 };
 
 export default function App() {
-  return (
-    <ErrorBoundaryUI>
-      <AuthProvider>
-        <MainContent />
-      </AuthProvider>
-    </ErrorBoundaryUI>
-  );
+  return <MainContent />;
 }

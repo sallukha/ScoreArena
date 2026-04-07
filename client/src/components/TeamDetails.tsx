@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { db, doc, getDoc, updateDoc, collection, query, where, onSnapshot, handleFirestoreError, OperationType, limit, addDoc, serverTimestamp, auth } from '../firebase';
+import { db, doc, query, collection, where, onSnapshot, handleFirestoreError, OperationType, limit, auth } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Users, UserPlus, ArrowLeft, Search, X, ChevronRight, Trophy, Shield, Link2 } from 'lucide-react';
 import { Team, Player } from '../types';
 import { findPlayersByPhone } from '../utils/playerLookup';
+import { useUpdateTeamMutation } from '../features/teams/hooks/useTeamMutations';
+import { useCreatePlayerMutation } from '../features/players/hooks/usePlayerMutations';
 
 interface TeamDetailsProps {
   teamId: string;
@@ -23,6 +25,8 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
   const [linkedPhonePlayer, setLinkedPhonePlayer] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const updateTeamMutation = useUpdateTeamMutation();
+  const createPlayerMutation = useCreatePlayerMutation();
 
   const captain = teamPlayers.find((player) => player.id === team?.captainId);
 
@@ -31,7 +35,7 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
       if (docSnap.exists()) {
         const teamData = { id: docSnap.id, ...docSnap.data() } as Team;
         setTeam(teamData);
-        
+
         // Fetch players in this team
         if (teamData.players && teamData.players.length > 0) {
           const q = query(collection(db, 'players'), where('__name__', 'in', teamData.players));
@@ -63,8 +67,11 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
     if (currentPlayers.includes(playerId)) return;
 
     try {
-      await updateDoc(doc(db, 'teams', teamId), {
-        players: [...currentPlayers, playerId]
+      await updateTeamMutation.mutateAsync({
+        teamId,
+        payload: {
+          players: [...currentPlayers, playerId],
+        },
       });
       setIsAddingPlayer(false);
     } catch (error) {
@@ -75,8 +82,11 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
   const updateCaptain = async (playerId: string) => {
     if (!team) return;
     try {
-      await updateDoc(doc(db, 'teams', teamId), {
-        captainId: playerId
+      await updateTeamMutation.mutateAsync({
+        teamId,
+        payload: {
+          captainId: playerId,
+        },
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `teams/${teamId}`);
@@ -87,9 +97,12 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
     if (!team) return;
     const currentPlayers = team.players || [];
     try {
-      await updateDoc(doc(db, 'teams', teamId), {
-        players: currentPlayers.filter(id => id !== playerId),
-        captainId: team.captainId === playerId ? '' : team.captainId || ''
+      await updateTeamMutation.mutateAsync({
+        teamId,
+        payload: {
+          players: currentPlayers.filter(id => id !== playerId),
+          captainId: team.captainId === playerId ? '' : team.captainId || '',
+        },
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `teams/${teamId}`);
@@ -100,18 +113,20 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
     if (!newPlayerName.trim() || !auth.currentUser || !team) return;
     setIsSaving(true);
     try {
-      const playerRef = await addDoc(collection(db, 'players'), {
+      const playerId = await createPlayerMutation.mutateAsync({
         name: newPlayerName.trim(),
         role: 'All-rounder',
         stats: { runs: 0, wickets: 0, matches: 0, average: 0, strikeRate: 0, economy: 0 },
         createdBy: auth.currentUser.uid,
-        createdAt: serverTimestamp()
       } as any);
 
       const currentPlayers = team.players || [];
-      await updateDoc(doc(db, 'teams', teamId), {
-        players: [...currentPlayers, playerRef.id]
-      });
+      await updateTeamMutation.mutateAsync({
+        teamId,
+        payload: {
+          players: [...currentPlayers, playerId],
+        },
+      } as any);
 
       setIsQuickAdding(false);
       setNewPlayerName('');
@@ -134,7 +149,7 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
     }
   };
 
-  const filteredPlayers = allPlayers.filter(p => 
+  const filteredPlayers = allPlayers.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
     !team?.players?.includes(p.id)
   );
@@ -191,7 +206,7 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
           <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
             <span className="w-1 h-4 bg-yellow-500 rounded-full"></span> Squad Members
           </h3>
-          <button 
+          <button
             onClick={() => setIsAddingPlayer(true)}
             className="flex items-center gap-1 text-yellow-600 text-xs font-black uppercase tracking-widest"
           >
@@ -245,7 +260,7 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{player.role}</p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => removePlayerFromTeam(player.id)}
                   className="p-2 text-gray-300 hover:text-red-500 transition-colors"
                 >
@@ -278,8 +293,8 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                 <h3 className="text-xl font-black italic uppercase tracking-tighter">
                   {isQuickAdding ? 'Quick Add Player' : 'Select Player'}
                 </h3>
-                <button 
-                  onClick={() => { setIsAddingPlayer(false); setIsQuickAdding(false); }} 
+                <button
+                  onClick={() => { setIsAddingPlayer(false); setIsQuickAdding(false); }}
                   className="p-2 bg-gray-100 rounded-full"
                 >
                   <X size={20} />
@@ -297,13 +312,13 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                     autoFocus
                   />
                   <div className="flex gap-3">
-                    <button 
+                    <button
                       onClick={() => setIsQuickAdding(false)}
                       className="flex-1 py-4 bg-gray-100 rounded-2xl font-bold text-gray-500 uppercase text-xs tracking-widest"
                     >
                       Cancel
                     </button>
-                    <button 
+                    <button
                       onClick={handleQuickAdd}
                       disabled={isSaving || !newPlayerName.trim()}
                       className="flex-1 py-4 bg-yellow-500 rounded-2xl font-black text-black uppercase text-xs tracking-widest shadow-lg shadow-yellow-500/20 disabled:opacity-50"
@@ -325,7 +340,7 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                         className="w-full bg-gray-50 border-none rounded-2xl py-4 pl-12 pr-4 font-bold text-sm focus:ring-2 focus:ring-yellow-500"
                       />
                     </div>
-                    <button 
+                    <button
                       onClick={() => setIsQuickAdding(true)}
                       className="bg-black text-white px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest"
                     >

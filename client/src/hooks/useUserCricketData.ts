@@ -1,29 +1,55 @@
-import { useEffect, useState } from "react";
-import {
-  db,
-  doc,
-  getDoc,
-  query,
-  collection,
-  where,
-  onSnapshot,
-  handleFirestoreError,
-  OperationType,
-} from "../firebase";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { handleFirestoreError, OperationType } from "../firebase";
 import { UserProfile } from "../types";
+import {
+  fetchTeamPair,
+  subscribeMatchesByStatuses,
+  subscribeUserCreatedCompletedMatches,
+  subscribeUserCreatedLiveMatches,
+} from "../features/matches/services/matchService";
+import { subscribePrimaryPlayerByIdentity } from "../features/players/services/playerService";
+import { subscribeTeamsByPlayer } from "../features/teams/services/teamService";
 
 export function useUserCricketData(user: UserProfile | null) {
-  const [matches, setMatches] = useState<any[]>([]);
-  const [recentMatches, setRecentMatches] = useState<any[]>([]);
-  const [userTeamIds, setUserTeamIds] = useState<string[]>([]);
-  const [teams, setTeams] = useState<Record<string, any>>({});
+  const queryClient = useQueryClient();
+
+  const userKey = user?.uid || "anonymous";
+  const matchesKey = ["matches", "user", userKey, "live"];
+  const recentMatchesKey = ["matches", "user", userKey, "completed"];
+  const userTeamIdsKey = ["teams", "user", userKey, "ids"];
+  const teamsByIdKey = ["teams", "user", userKey, "byId"];
+
+  const matchesQuery = useQuery<any[]>({
+    queryKey: matchesKey,
+    queryFn: async () => [],
+    enabled: Boolean(user),
+  });
+
+  const recentMatchesQuery = useQuery<any[]>({
+    queryKey: recentMatchesKey,
+    queryFn: async () => [],
+    enabled: Boolean(user),
+  });
+
+  const userTeamIdsQuery = useQuery<string[]>({
+    queryKey: userTeamIdsKey,
+    queryFn: async () => [],
+    enabled: Boolean(user),
+  });
+
+  const teamsQuery = useQuery<Record<string, any>>({
+    queryKey: teamsByIdKey,
+    queryFn: async () => ({}),
+    enabled: Boolean(user),
+  });
 
   useEffect(() => {
     if (!user) {
-      setMatches([]);
-      setRecentMatches([]);
-      setUserTeamIds([]);
-      setTeams({});
+      queryClient.setQueryData(matchesKey, []);
+      queryClient.setQueryData(recentMatchesKey, []);
+      queryClient.setQueryData(userTeamIdsKey, []);
+      queryClient.setQueryData(teamsByIdKey, {});
       return;
     }
 
@@ -34,44 +60,25 @@ export function useUserCricketData(user: UserProfile | null) {
     async function fetchTeamNames(m: any) {
       if (!m?.teamA || !m?.teamB) return;
 
-      const [teamADoc, teamBDoc] = await Promise.all([
-        getDoc(doc(db, "teams", m.teamA)),
-        getDoc(doc(db, "teams", m.teamB)),
-      ]);
+      const { teamAData, teamBData } = await fetchTeamPair(m.teamA, m.teamB);
 
       if (!isMounted) return;
 
-      setTeams((prev) => {
+      queryClient.setQueryData(teamsByIdKey, (prevData: any) => {
+        const prev = (prevData || {}) as Record<string, any>;
         const next = { ...prev };
-        if (teamADoc.exists() && !next[m.teamA])
-          next[m.teamA] = teamADoc.data();
-        if (teamBDoc.exists() && !next[m.teamB])
-          next[m.teamB] = teamBDoc.data();
+        if (teamAData && !next[m.teamA]) next[m.teamA] = teamAData;
+        if (teamBData && !next[m.teamB]) next[m.teamB] = teamBData;
         return next;
       });
     }
 
-    const qLive = query(
-      collection(db, "matches"),
-      where("status", "==", "live"),
-      where("createdBy", "==", user.uid),
-    );
-    const qRecent = query(
-      collection(db, "matches"),
-      where("status", "==", "completed"),
-      where("createdBy", "==", user.uid),
-    );
-
-    const unsubLive = onSnapshot(
-      qLive,
-      (snap) => {
-        const matchData = snap.docs.map((matchDoc) => ({
-          id: matchDoc.id,
-          ...matchDoc.data(),
-        }));
-        setMatches(matchData);
+    const unsubLive = subscribeUserCreatedLiveMatches(
+      user.uid,
+      (matchData) => {
+        queryClient.setQueryData(matchesKey, matchData);
         matchData.forEach((m) => {
-          fetchTeamNames(m);
+          void fetchTeamNames(m);
         });
       },
       (error) => {
@@ -79,16 +86,12 @@ export function useUserCricketData(user: UserProfile | null) {
       },
     );
 
-    const unsubRecent = onSnapshot(
-      qRecent,
-      (snap) => {
-        const matchData = snap.docs.map((matchDoc) => ({
-          id: matchDoc.id,
-          ...matchDoc.data(),
-        }));
-        setRecentMatches(matchData);
+    const unsubRecent = subscribeUserCreatedCompletedMatches(
+      user.uid,
+      (matchData) => {
+        queryClient.setQueryData(recentMatchesKey, matchData);
         matchData.forEach((m) => {
-          fetchTeamNames(m);
+          void fetchTeamNames(m);
         });
       },
       (error) => {
@@ -96,16 +99,9 @@ export function useUserCricketData(user: UserProfile | null) {
       },
     );
 
-    const qPlayer = query(
-      collection(db, "players"),
-      user.phoneNumber
-        ? where("phoneNumber", "==", user.phoneNumber)
-        : where("email", "==", user.email),
-    );
-
-    const unsubPlayer = onSnapshot(
-      qPlayer,
-      (snap) => {
+    const unsubPlayer = subscribePrimaryPlayerByIdentity(
+      { phoneNumber: user.phoneNumber, email: user.email },
+      (player) => {
         if (unsubscribeTeams) {
           unsubscribeTeams();
           unsubscribeTeams = undefined;
@@ -115,18 +111,14 @@ export function useUserCricketData(user: UserProfile | null) {
           unsubscribeTeamMatches = undefined;
         }
 
-        if (!snap.empty) {
-          const playerId = snap.docs[0].id;
-          const qTeams = query(
-            collection(db, "teams"),
-            where("players", "array-contains", playerId),
-          );
+        if (player) {
+          const playerId = player.id;
 
-          unsubscribeTeams = onSnapshot(
-            qTeams,
-            (teamSnap) => {
-              const teamIds = teamSnap.docs.map((teamDoc) => teamDoc.id);
-              setUserTeamIds(teamIds);
+          unsubscribeTeams = subscribeTeamsByPlayer(
+            playerId,
+            (teamsData) => {
+              const teamIds = teamsData.map((teamDoc) => teamDoc.id);
+              queryClient.setQueryData(userTeamIdsKey, teamIds);
 
               if (unsubscribeTeamMatches) {
                 unsubscribeTeamMatches();
@@ -134,16 +126,9 @@ export function useUserCricketData(user: UserProfile | null) {
               }
 
               if (teamIds.length > 0) {
-                const qTeamMatches = query(
-                  collection(db, "matches"),
-                  where("status", "in", ["live", "completed"]),
-                );
-                unsubscribeTeamMatches = onSnapshot(
-                  qTeamMatches,
-                  (matchSnap) => {
-                    const allMatches = matchSnap.docs.map(
-                      (d) => ({ id: d.id, ...d.data() }) as any,
-                    );
+                unsubscribeTeamMatches = subscribeMatchesByStatuses(
+                  ["live", "completed"],
+                  (allMatches) => {
                     const participantMatches = allMatches.filter(
                       (m) =>
                         teamIds.includes(m.teamA) || teamIds.includes(m.teamB),
@@ -156,7 +141,8 @@ export function useUserCricketData(user: UserProfile | null) {
                       (m) => m.status === "completed",
                     );
 
-                    setMatches((prev) => {
+                    queryClient.setQueryData(matchesKey, (prevData: any) => {
+                      const prev = (prevData || []) as any[];
                       const existingIds = new Set(prev.map((m) => m.id));
                       const newMatches = liveParticipant.filter(
                         (m) => !existingIds.has(m.id),
@@ -164,16 +150,20 @@ export function useUserCricketData(user: UserProfile | null) {
                       return [...prev, ...newMatches];
                     });
 
-                    setRecentMatches((prev) => {
-                      const existingIds = new Set(prev.map((m) => m.id));
-                      const newMatches = recentParticipant.filter(
-                        (m) => !existingIds.has(m.id),
-                      );
-                      return [...prev, ...newMatches];
-                    });
+                    queryClient.setQueryData(
+                      recentMatchesKey,
+                      (prevData: any) => {
+                        const prev = (prevData || []) as any[];
+                        const existingIds = new Set(prev.map((m) => m.id));
+                        const newMatches = recentParticipant.filter(
+                          (m) => !existingIds.has(m.id),
+                        );
+                        return [...prev, ...newMatches];
+                      },
+                    );
 
                     participantMatches.forEach((m) => {
-                      fetchTeamNames(m);
+                      void fetchTeamNames(m);
                     });
                   },
                   (error) => {
@@ -205,7 +195,22 @@ export function useUserCricketData(user: UserProfile | null) {
         unsubscribeTeamMatches();
       }
     };
-  }, [user]);
+  }, [queryClient, user]);
 
-  return { matches, recentMatches, userTeamIds, teams };
+  return {
+    matches: matchesQuery.data || [],
+    recentMatches: recentMatchesQuery.data || [],
+    userTeamIds: userTeamIdsQuery.data || [],
+    teams: teamsQuery.data || {},
+    loading:
+      matchesQuery.isLoading ||
+      recentMatchesQuery.isLoading ||
+      userTeamIdsQuery.isLoading ||
+      teamsQuery.isLoading,
+    isError:
+      matchesQuery.isError ||
+      recentMatchesQuery.isError ||
+      userTeamIdsQuery.isError ||
+      teamsQuery.isError,
+  };
 }

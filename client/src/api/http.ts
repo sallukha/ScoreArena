@@ -6,7 +6,13 @@ export async function apiFetch<T>(input: string, init?: RequestInit): Promise<T>
   const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
   const baseUrl = getApiBaseUrl();
   const fullUrl = `${baseUrl}${input}`;
-  
+
+  // DEBUG LOGS FOR ANDROID LOGCAT
+  console.log("--- API DEBUG START ---");
+  console.log("Full URL:", `${baseUrl}${input}`);
+  console.log("Token from LocalStorage:", token ? "FOUND (Starts with " + token.substring(0, 10) + "...)" : "NOT FOUND (NULL)");
+  console.log("--- API DEBUG END ---");
+
   console.log(`API Request: ${init?.method || 'GET'} ${fullUrl}`);
   
   const response = await fetch(fullUrl, {

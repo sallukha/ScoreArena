@@ -1,20 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { handleFirestoreError, OperationType } from "../firebase";
 import {
-  db,
-  doc,
-  getDoc,
-  query,
-  collection,
-  where,
-  onSnapshot,
-  limit,
-  handleFirestoreError,
-  OperationType,
-} from "../firebase";
+  fetchTeamPair,
+  subscribeGlobalLiveMatches,
+} from "../features/matches/services/matchService";
 
 export function useLiveMatches() {
-  const [globalMatches, setGlobalMatches] = useState<any[]>([]);
-  const [teams, setTeams] = useState<Record<string, any>>({});
+  const queryClient = useQueryClient();
+
+  const globalMatchesQuery = useQuery<any[]>({
+    queryKey: ["matches", "global", "live"],
+    queryFn: async () => [],
+  });
+
+  const teamsQuery = useQuery<Record<string, any>>({
+    queryKey: ["teams", "byId", "live-context"],
+    queryFn: async () => ({}),
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -22,38 +25,28 @@ export function useLiveMatches() {
     async function fetchTeamNames(m: any) {
       if (!m?.teamA || !m?.teamB) return;
 
-      const [teamADoc, teamBDoc] = await Promise.all([
-        getDoc(doc(db, "teams", m.teamA)),
-        getDoc(doc(db, "teams", m.teamB)),
-      ]);
+      const { teamAData, teamBData } = await fetchTeamPair(m.teamA, m.teamB);
 
       if (!isMounted) return;
 
-      setTeams((prev) => {
-        const next = { ...prev };
-        if (teamADoc.exists() && !next[m.teamA])
-          next[m.teamA] = teamADoc.data();
-        if (teamBDoc.exists() && !next[m.teamB])
-          next[m.teamB] = teamBDoc.data();
-        return next;
-      });
+      queryClient.setQueryData(
+        ["teams", "byId", "live-context"],
+        (prevData: any) => {
+          const prev = (prevData || {}) as Record<string, any>;
+          const next = { ...prev };
+          if (teamAData && !next[m.teamA]) next[m.teamA] = teamAData;
+          if (teamBData && !next[m.teamB]) next[m.teamB] = teamBData;
+          return next;
+        },
+      );
     }
 
-    const qGlobal = query(
-      collection(db, "matches"),
-      where("status", "==", "live"),
-      limit(10),
-    );
-    const unsubGlobal = onSnapshot(
-      qGlobal,
+    const unsubGlobal = subscribeGlobalLiveMatches(
       (snap) => {
-        const matchData = snap.docs.map((matchDoc) => ({
-          id: matchDoc.id,
-          ...matchDoc.data(),
-        }));
-        setGlobalMatches(matchData);
+        const matchData = snap;
+        queryClient.setQueryData(["matches", "global", "live"], matchData);
         matchData.forEach((m) => {
-          fetchTeamNames(m);
+          void fetchTeamNames(m);
         });
       },
       (error) => {
@@ -65,7 +58,12 @@ export function useLiveMatches() {
       isMounted = false;
       unsubGlobal();
     };
-  }, []);
+  }, [queryClient]);
 
-  return { globalMatches, teams };
+  return {
+    globalMatches: globalMatchesQuery.data || [],
+    teams: teamsQuery.data || {},
+    loading: globalMatchesQuery.isLoading || teamsQuery.isLoading,
+    isError: globalMatchesQuery.isError || teamsQuery.isError,
+  };
 }

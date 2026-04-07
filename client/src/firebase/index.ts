@@ -1,33 +1,34 @@
-import { io, type Socket } from 'socket.io-client';
-import { getApp, getApps, initializeApp } from 'firebase/app';
+import { io, type Socket } from "socket.io-client";
+import { getApp, getApps, initializeApp } from "firebase/app";
 import {
   getAuth as getFirebaseAuth,
   RecaptchaVerifier as FirebaseRecaptchaVerifier,
   signInWithPhoneNumber as firebaseSignInWithPhoneNumber,
   signOut as firebaseSignOut,
-} from 'firebase/auth';
-import { getSocketBaseUrl } from '../api/config';
-import { AUTH_TOKEN_STORAGE_KEY, apiFetch as baseApiFetch } from '../api/http';
+} from "firebase/auth";
+import { firebaseConfig } from "../config/firebase";
+import { getSocketBaseUrl } from "../api/config";
+import { AUTH_TOKEN_STORAGE_KEY, apiFetch as baseApiFetch } from "../api/http";
 
 type Constraint =
-  | { type: 'where'; field: string; op: string; value: any }
-  | { type: 'orderBy'; field: string; direction: 'asc' | 'desc' }
-  | { type: 'limit'; count: number };
+  | { type: "where"; field: string; op: string; value: any }
+  | { type: "orderBy"; field: string; direction: "asc" | "desc" }
+  | { type: "limit"; count: number };
 
 type RefBase = {
   path: string;
 };
 
 type CollectionRef = RefBase & {
-  type: 'collection';
+  type: "collection";
 };
 
 type DocumentRef = RefBase & {
-  type: 'document';
+  type: "document";
 };
 
 type QueryRef = RefBase & {
-  type: 'query';
+  type: "query";
   constraints: Constraint[];
 };
 
@@ -42,7 +43,7 @@ type AuthUser = {
   email?: string;
   phoneNumber?: string;
   photoURL?: string;
-  role?: 'user' | 'admin';
+  role?: "user" | "admin";
   isAnonymous?: boolean;
   emailVerified?: boolean;
   tenantId?: string | null;
@@ -60,28 +61,22 @@ declare global {
   }
 }
 
-const firebaseConfig = {
-  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || 'AIzaSyA2sBh5eTwaAHkKhxbDynOEEcJPxi6Iz0w',
-  authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || 'fir-ath-d32b0.firebaseapp.com',
-  projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || 'fir-ath-d32b0',
-  storageBucket:
-    (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || 'fir-ath-d32b0.firebasestorage.app',
-  messagingSenderId:
-    (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '838787006701',
-  appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || '1:838787006701:web:6e3299c2bef3c4ab280ce4',
-  measurementId: (import.meta as any).env?.VITE_FIREBASE_MEASUREMENT_ID || 'G-55JTD1M2QK',
-};
-
 const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const firebaseAuth = getFirebaseAuth(firebaseApp);
-const AUTH_STORAGE_KEY = 'scorewala-auth-user';
+const AUTH_STORAGE_KEY = "scorewala-auth-user";
 const SOCKET_BASE = getSocketBaseUrl();
-const BASE_POLL_INTERVAL = Number((import.meta as any).env?.VITE_POLL_INTERVAL_MS || 4000);
-const HIDDEN_TAB_POLL_INTERVAL = Number((import.meta as any).env?.VITE_HIDDEN_POLL_INTERVAL_MS || 12000);
-const MAX_BACKOFF_INTERVAL = Number((import.meta as any).env?.VITE_MAX_POLL_INTERVAL_MS || 20000);
+const BASE_POLL_INTERVAL = Number(
+  (import.meta as any).env?.VITE_POLL_INTERVAL_MS || 4000,
+);
+const HIDDEN_TAB_POLL_INTERVAL = Number(
+  (import.meta as any).env?.VITE_HIDDEN_POLL_INTERVAL_MS || 12000,
+);
+const MAX_BACKOFF_INTERVAL = Number(
+  (import.meta as any).env?.VITE_MAX_POLL_INTERVAL_MS || 20000,
+);
 
 function joinPath(parts: string[]) {
-  return parts.filter(Boolean).join('/');
+  return parts.filter(Boolean).join("/");
 }
 
 function clearStoredAuth() {
@@ -90,12 +85,30 @@ function clearStoredAuth() {
   authStore.currentUser = null;
 }
 
+function isUnauthorizedError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("HTTP 401");
+}
+
 async function apiFetch<T>(input: string, init?: RequestInit): Promise<T> {
   try {
     return await baseApiFetch<T>(input, init);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('HTTP 401')) {
+    if (isUnauthorizedError(error)) {
+      const canRefreshSession =
+        !String(input).startsWith("/auth/") && !!firebaseAuth.currentUser;
+
+      if (canRefreshSession) {
+        try {
+          await exchangeFirebaseSession(firebaseAuth.currentUser);
+          return await baseApiFetch<T>(input, init);
+        } catch (refreshError) {
+          if (!isUnauthorizedError(refreshError)) {
+            console.warn("Session refresh failed:", refreshError);
+          }
+        }
+      }
+
       clearStoredAuth();
       emitAuthChange();
     }
@@ -112,7 +125,7 @@ function sanitizeDocument(doc: SnapshotDoc | null) {
 function createDocSnapshot(doc: SnapshotDoc | null) {
   const data = sanitizeDocument(doc);
   return {
-    id: data?.id || '',
+    id: data?.id || "",
     exists: () => !!data,
     data: (): any => {
       if (!data) return undefined;
@@ -132,16 +145,16 @@ function createQuerySnapshot(docs: SnapshotDoc[]) {
 function stripUndefined(input: any): any {
   if (Array.isArray(input)) return input.map(stripUndefined);
   if (input instanceof Date) return input.toISOString();
-  if (!input || typeof input !== 'object') return input;
+  if (!input || typeof input !== "object") return input;
 
   return Object.fromEntries(
     Object.entries(input)
       .filter(([, value]) => value !== undefined)
-      .map(([key, value]) => [key, stripUndefined(value)])
+      .map(([key, value]) => [key, stripUndefined(value)]),
   );
 }
 
-export const db = { kind: 'rest-db' };
+export const db = { kind: "rest-db" };
 
 type AuthStore = {
   currentUser: AuthUser | null;
@@ -173,14 +186,19 @@ function hasAuthSession() {
   return !!getAuthToken();
 }
 
-function getComparablePayload(ref: DocumentRef | QueryRef | CollectionRef, snapshot: any) {
-  return ref.type === 'document'
+function getComparablePayload(
+  ref: DocumentRef | QueryRef | CollectionRef,
+  snapshot: any,
+) {
+  return ref.type === "document"
     ? JSON.stringify(snapshot.data?.() || null)
-    : JSON.stringify(snapshot.docs.map((item: any) => ({ id: item.id, ...item.data() })));
+    : JSON.stringify(
+        snapshot.docs.map((item: any) => ({ id: item.id, ...item.data() })),
+      );
 }
 
 function ensureRealtimeSocket() {
-  if (realtimeSocket || typeof window === 'undefined') {
+  if (realtimeSocket || typeof window === "undefined") {
     return realtimeSocket;
   }
 
@@ -191,18 +209,18 @@ function ensureRealtimeSocket() {
 
   realtimeSocket = io(SOCKET_BASE, {
     autoConnect: false,
-    transports: ['websocket', 'polling'],
+    transports: ["websocket", "polling"],
     auth: {
       token,
     },
   });
 
-  realtimeSocket.on('snapshot:data', (payload: any) => {
-    const subscription = socketSubscriptions.get(String(payload?.id || ''));
+  realtimeSocket.on("snapshot:data", (payload: any) => {
+    const subscription = socketSubscriptions.get(String(payload?.id || ""));
     if (!subscription) return;
 
     const snapshot =
-      payload.kind === 'document'
+      payload.kind === "document"
         ? createDocSnapshot(payload.doc || null)
         : createQuerySnapshot(Array.isArray(payload.docs) ? payload.docs : []);
 
@@ -215,34 +233,37 @@ function ensureRealtimeSocket() {
     subscription.callback(snapshot);
   });
 
-  realtimeSocket.on('snapshot:error', (payload: any) => {
-    const subscription = socketSubscriptions.get(String(payload?.id || ''));
+  realtimeSocket.on("snapshot:error", (payload: any) => {
+    const subscription = socketSubscriptions.get(String(payload?.id || ""));
     if (subscription?.onError) {
-      subscription.onError(new Error(payload?.message || 'Realtime subscription failed'));
+      subscription.onError(
+        new Error(payload?.message || "Realtime subscription failed"),
+      );
     }
   });
 
-  realtimeSocket.on('connect', () => {
+  realtimeSocket.on("connect", () => {
     for (const [id, subscription] of socketSubscriptions.entries()) {
       const queryRef: QueryRef =
-        subscription.ref.type === 'query'
+        subscription.ref.type === "query"
           ? subscription.ref
           : {
-              type: 'query',
+              type: "query",
               path: subscription.ref.path,
               constraints: [],
             };
 
-      realtimeSocket?.emit('snapshot:subscribe', {
+      realtimeSocket?.emit("snapshot:subscribe", {
         id,
-        mode: subscription.ref.type === 'document' ? 'document' : 'query',
+        mode: subscription.ref.type === "document" ? "document" : "query",
         path: subscription.ref.path,
-        constraints: subscription.ref.type === 'document' ? [] : queryRef.constraints,
+        constraints:
+          subscription.ref.type === "document" ? [] : queryRef.constraints,
       });
     }
   });
 
-  realtimeSocket.on('connect_error', (error) => {
+  realtimeSocket.on("connect_error", (error) => {
     for (const subscription of socketSubscriptions.values()) {
       subscription.onError?.(error);
     }
@@ -277,17 +298,17 @@ function emitAuthChange() {
 function normalizeUser(user: any): AuthUser {
   return {
     uid: user.uid,
-    displayName: user.displayName || 'ScoreArena User',
-    email: user.email || '',
-    phoneNumber: user.phoneNumber || '',
-    photoURL: user.photoURL || '',
-    role: user.role || 'user',
+    displayName: user.displayName || "ScoreArena User",
+    email: user.email || "",
+    phoneNumber: user.phoneNumber || "",
+    photoURL: user.photoURL || "",
+    role: user.role || "user",
     isAnonymous: false,
     emailVerified: true,
     tenantId: null,
     providerData: [
       {
-        providerId: user.phoneNumber ? 'phone' : 'google',
+        providerId: user.phoneNumber ? "phone" : "google",
         displayName: user.displayName || null,
         email: user.email || null,
         photoURL: user.photoURL || null,
@@ -299,7 +320,10 @@ function normalizeUser(user: any): AuthUser {
 function setCurrentUser(user: any, token?: string) {
   authStore.currentUser = user ? normalizeUser(user) : null;
   if (authStore.currentUser) {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authStore.currentUser));
+    localStorage.setItem(
+      AUTH_STORAGE_KEY,
+      JSON.stringify(authStore.currentUser),
+    );
     if (token) {
       localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
     }
@@ -334,8 +358,11 @@ export const auth = {
 
 export const googleProvider = {};
 
-export const serverTimestamp = () => ({ __type: 'serverTimestamp' as const });
-export const increment = (amount: number) => ({ __type: 'increment' as const, amount });
+export const serverTimestamp = () => ({ __type: "serverTimestamp" as const });
+export const increment = (amount: number) => ({
+  __type: "increment" as const,
+  amount,
+});
 
 function loadGoogleScript() {
   return new Promise<void>((resolve, reject) => {
@@ -344,20 +371,26 @@ function loadGoogleScript() {
       return;
     }
 
-    const existing = document.querySelector('script[data-google-identity="true"]');
+    const existing = document.querySelector(
+      'script[data-google-identity="true"]',
+    );
     if (existing) {
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error('Failed to load Google script')), { once: true });
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("Failed to load Google script")),
+        { once: true },
+      );
       return;
     }
 
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
     script.defer = true;
-    script.dataset.googleIdentity = 'true';
+    script.dataset.googleIdentity = "true";
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google script'));
+    script.onerror = () => reject(new Error("Failed to load Google script"));
     document.head.appendChild(script);
   });
 }
@@ -365,7 +398,9 @@ function loadGoogleScript() {
 async function signInWithGoogleOAuth() {
   const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID;
   if (!clientId) {
-    throw new Error('Google login is not configured. Set VITE_GOOGLE_CLIENT_ID in .env.');
+    throw new Error(
+      "Google login is not configured. Set VITE_GOOGLE_CLIENT_ID in .env.",
+    );
   }
 
   await loadGoogleScript();
@@ -373,40 +408,47 @@ async function signInWithGoogleOAuth() {
   const accessToken = await new Promise<string>((resolve, reject) => {
     const tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: 'openid email profile',
+      scope: "openid email profile",
       callback: (response: any) => {
         if (response?.access_token) {
           resolve(response.access_token);
           return;
         }
-        reject(new Error(response?.error || 'Google login failed'));
+        reject(new Error(response?.error || "Google login failed"));
       },
-      error_callback: (error: any) => reject(new Error(error?.message || 'Google login failed')),
+      error_callback: (error: any) =>
+        reject(new Error(error?.message || "Google login failed")),
     });
 
-    tokenClient.requestAccessToken({ prompt: 'select_account' });
+    tokenClient.requestAccessToken({ prompt: "select_account" });
   });
 
-  const googleProfile = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
+  const googleProfile = await fetch(
+    "https://www.googleapis.com/oauth2/v3/userinfo",
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
-  }).then(async (response) => {
+  ).then(async (response) => {
     if (!response.ok) {
-      throw new Error('Failed to fetch Google profile');
+      throw new Error("Failed to fetch Google profile");
     }
     return response.json();
   });
 
-  const result = await apiFetch<{ user: AuthUser; token: string }>('/auth/google', {
-    method: 'POST',
-    body: JSON.stringify({
-      googleId: googleProfile.sub,
-      displayName: googleProfile.name,
-      email: googleProfile.email,
-      photoURL: googleProfile.picture,
-    }),
-  });
+  const result = await apiFetch<{ user: AuthUser; token: string }>(
+    "/auth/google",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        googleId: googleProfile.sub,
+        displayName: googleProfile.name,
+        email: googleProfile.email,
+        photoURL: googleProfile.picture,
+      }),
+    },
+  );
 
   setCurrentUser(result.user, result.token);
   return { user: authStore.currentUser };
@@ -414,29 +456,35 @@ async function signInWithGoogleOAuth() {
 
 async function exchangeFirebaseSession(firebaseUser: any) {
   try {
-    console.log('Exchanging Firebase session for user:', firebaseUser.phoneNumber);
-    
-    const idToken = await firebaseUser.getIdToken();
-    console.log('Firebase ID token obtained');
-    
-    const result = await apiFetch<{ user: AuthUser; token: string }>('/auth/firebase', {
-      method: 'POST',
-      body: JSON.stringify({
-        idToken,
-        displayName: firebaseUser.displayName || '',
-        email: firebaseUser.email || '',
-        phoneNumber: firebaseUser.phoneNumber || '',
-        photoURL: firebaseUser.photoURL || '',
-      }),
-    });
+    console.log(
+      "Exchanging Firebase session for user:",
+      firebaseUser.phoneNumber,
+    );
 
-    console.log('Backend auth response received, storing session');
+    const idToken = await firebaseUser.getIdToken();
+    console.log("Firebase ID token obtained");
+
+    const result = await baseApiFetch<{ user: AuthUser; token: string }>(
+      "/auth/firebase",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          idToken,
+          displayName: firebaseUser.displayName || "",
+          email: firebaseUser.email || "",
+          phoneNumber: firebaseUser.phoneNumber || "",
+          photoURL: firebaseUser.photoURL || "",
+        }),
+      },
+    );
+
+    console.log("Backend auth response received, storing session");
     setCurrentUser(result.user, result.token);
-    console.log('User session stored successfully');
-    
+    console.log("User session stored successfully");
+
     return { user: authStore.currentUser };
   } catch (error) {
-    console.error('Firebase session exchange failed:', error);
+    console.error("Firebase session exchange failed:", error);
     throw error;
   }
 }
@@ -444,26 +492,30 @@ async function exchangeFirebaseSession(firebaseUser: any) {
 export const signInWithPhoneNumber = async (
   _authInstance: typeof auth,
   phoneNumber: string,
-  verifier: any
+  verifier: any,
 ) => {
-  console.log('Initiating phone sign-in for:', phoneNumber);
-  
-  const confirmationResult = await firebaseSignInWithPhoneNumber(firebaseAuth, phoneNumber, verifier);
-  console.log('OTP sent successfully');
+  console.log("Initiating phone sign-in for:", phoneNumber);
+
+  const confirmationResult = await firebaseSignInWithPhoneNumber(
+    firebaseAuth,
+    phoneNumber,
+    verifier,
+  );
+  console.log("OTP sent successfully");
 
   return {
     confirm: async (otp: string) => {
       try {
-        console.log('Confirming OTP...');
+        console.log("Confirming OTP...");
         const result = await confirmationResult.confirm(otp);
-        console.log('OTP confirmed by Firebase');
-        
+        console.log("OTP confirmed by Firebase");
+
         const authResult = await exchangeFirebaseSession(result.user);
-        console.log('Phone authentication completed successfully');
-        
+        console.log("Phone authentication completed successfully");
+
         return authResult;
       } catch (error) {
-        console.error('OTP confirmation failed:', error);
+        console.error("OTP confirmation failed:", error);
         throw error;
       }
     },
@@ -479,7 +531,10 @@ export const logOut = async () => {
   setCurrentUser(null);
 };
 
-export const onAuthStateChanged = (_auth: typeof auth, callback: (user: AuthUser | null) => void) => {
+export const onAuthStateChanged = (
+  _auth: typeof auth,
+  callback: (user: AuthUser | null) => void,
+) => {
   authStore.listeners.add(callback);
   callback(hasAuthSession() ? authStore.currentUser : null);
   return () => authStore.listeners.delete(callback);
@@ -494,12 +549,12 @@ export class RecaptchaVerifier {
 export const PhoneAuthProvider = {};
 
 export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
+  CREATE = "create",
+  UPDATE = "update",
+  DELETE = "delete",
+  LIST = "list",
+  GET = "get",
+  WRITE = "write",
 }
 
 export interface FirestoreErrorInfo {
@@ -521,7 +576,11 @@ export interface FirestoreErrorInfo {
   };
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null,
+) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -541,47 +600,55 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path,
   };
-  console.error('API Error:', JSON.stringify(errInfo));
+  console.error("API Error:", JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
 
 export function collection(base: any, ...segments: string[]): CollectionRef {
   const basePath = base?.path ? [base.path] : [];
-  return { type: 'collection', path: joinPath([...basePath, ...segments]) };
+  return { type: "collection", path: joinPath([...basePath, ...segments]) };
 }
 
 export function doc(base: any, ...segments: string[]): DocumentRef {
   const basePath = base?.path ? [base.path] : [];
-  return { type: 'document', path: joinPath([...basePath, ...segments]) };
+  return { type: "document", path: joinPath([...basePath, ...segments]) };
 }
 
-export function query(ref: CollectionRef, ...constraints: Constraint[]): QueryRef {
+export function query(
+  ref: CollectionRef,
+  ...constraints: Constraint[]
+): QueryRef {
   return {
-    type: 'query',
+    type: "query",
     path: ref.path,
     constraints,
   };
 }
 
 export function where(field: string, op: string, value: any): Constraint {
-  return { type: 'where', field, op, value };
+  return { type: "where", field, op, value };
 }
 
-export function orderBy(field: string, direction: 'asc' | 'desc' = 'asc'): Constraint {
-  return { type: 'orderBy', field, direction };
+export function orderBy(
+  field: string,
+  direction: "asc" | "desc" = "asc",
+): Constraint {
+  return { type: "orderBy", field, direction };
 }
 
 export function limit(count: number): Constraint {
-  return { type: 'limit', count };
+  return { type: "limit", count };
 }
 
 export async function getDoc(ref: DocumentRef) {
   try {
-    const result = await apiFetch<{ doc: SnapshotDoc }>(`/data/document?path=${encodeURIComponent(ref.path)}`);
+    const result = await apiFetch<{ doc: SnapshotDoc }>(
+      `/data/document?path=${encodeURIComponent(ref.path)}`,
+    );
     return createDocSnapshot(result.doc);
   } catch (error: any) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('404')) {
+    if (message.includes("404")) {
       return createDocSnapshot(null);
     }
     throw error;
@@ -594,16 +661,16 @@ export async function getDocFromServer(ref: DocumentRef) {
 
 export async function getDocs(ref: QueryRef | CollectionRef) {
   const queryRef: QueryRef =
-    ref.type === 'query'
+    ref.type === "query"
       ? ref
       : {
-          type: 'query',
+          type: "query",
           path: ref.path,
           constraints: [],
         };
 
-  const result = await apiFetch<{ docs: SnapshotDoc[] }>('/data/query', {
-    method: 'POST',
+  const result = await apiFetch<{ docs: SnapshotDoc[] }>("/data/query", {
+    method: "POST",
     body: JSON.stringify({
       path: queryRef.path,
       constraints: queryRef.constraints,
@@ -614,8 +681,8 @@ export async function getDocs(ref: QueryRef | CollectionRef) {
 }
 
 export async function setDoc(ref: DocumentRef, data: Record<string, any>) {
-  const result = await apiFetch<{ doc: SnapshotDoc }>('/data/document', {
-    method: 'PUT',
+  const result = await apiFetch<{ doc: SnapshotDoc }>("/data/document", {
+    method: "PUT",
     body: JSON.stringify({
       path: ref.path,
       data: stripUndefined(data),
@@ -626,8 +693,8 @@ export async function setDoc(ref: DocumentRef, data: Record<string, any>) {
 }
 
 export async function addDoc(ref: CollectionRef, data: Record<string, any>) {
-  const result = await apiFetch<{ doc: SnapshotDoc }>('/data/collection', {
-    method: 'POST',
+  const result = await apiFetch<{ doc: SnapshotDoc }>("/data/collection", {
+    method: "POST",
     body: JSON.stringify({
       path: ref.path,
       data: stripUndefined(data),
@@ -640,8 +707,8 @@ export async function addDoc(ref: CollectionRef, data: Record<string, any>) {
 }
 
 export async function updateDoc(ref: DocumentRef, data: Record<string, any>) {
-  const result = await apiFetch<{ doc: SnapshotDoc }>('/data/document', {
-    method: 'PATCH',
+  const result = await apiFetch<{ doc: SnapshotDoc }>("/data/document", {
+    method: "PATCH",
     body: JSON.stringify({
       path: ref.path,
       data: stripUndefined(data),
@@ -652,8 +719,8 @@ export async function updateDoc(ref: DocumentRef, data: Record<string, any>) {
 }
 
 export async function deleteDoc(ref: DocumentRef) {
-  return apiFetch('/data/document', {
-    method: 'DELETE',
+  return apiFetch("/data/document", {
+    method: "DELETE",
     body: JSON.stringify({ path: ref.path }),
   });
 }
@@ -661,10 +728,10 @@ export async function deleteDoc(ref: DocumentRef) {
 export function onSnapshot(
   ref: DocumentRef | QueryRef | CollectionRef,
   callback: (snapshot: any) => void,
-  onError?: (error: unknown) => void
+  onError?: (error: unknown) => void,
 ) {
   let stopped = false;
-  let lastPayload = '';
+  let lastPayload = "";
   let timer: number | null = null;
   let failureCount = 0;
   const subscriptionId = `sub_${Math.random().toString(36).slice(2)}_${Date.now()}`;
@@ -672,17 +739,22 @@ export function onSnapshot(
   const socket = ensureRealtimeSocket();
 
   const getQueryRef = () =>
-    ref.type === 'query'
+    ref.type === "query"
       ? ref
       : {
-          type: 'query' as const,
+          type: "query" as const,
           path: ref.path,
           constraints: [],
         };
 
   const getNextDelay = () => {
-    const baseDelay = document.hidden ? HIDDEN_TAB_POLL_INTERVAL : BASE_POLL_INTERVAL;
-    const backoffDelay = Math.min(baseDelay * 2 ** failureCount, MAX_BACKOFF_INTERVAL);
+    const baseDelay = document.hidden
+      ? HIDDEN_TAB_POLL_INTERVAL
+      : BASE_POLL_INTERVAL;
+    const backoffDelay = Math.min(
+      baseDelay * 2 ** failureCount,
+      MAX_BACKOFF_INTERVAL,
+    );
     const jitter = Math.floor(Math.random() * 500);
     return backoffDelay + jitter;
   };
@@ -700,9 +772,9 @@ export function onSnapshot(
   const poll = async () => {
     try {
       const snapshot =
-        ref.type === 'document'
+        ref.type === "document"
           ? await getDoc(ref)
-          : await getDocs(ref.type === 'collection' ? query(ref) : ref);
+          : await getDocs(ref.type === "collection" ? query(ref) : ref);
 
       const comparable = getComparablePayload(ref, snapshot);
 
@@ -734,11 +806,11 @@ export function onSnapshot(
     });
 
     if (socket.connected) {
-      socket.emit('snapshot:subscribe', {
+      socket.emit("snapshot:subscribe", {
         id: subscriptionId,
-        mode: ref.type === 'document' ? 'document' : 'query',
+        mode: ref.type === "document" ? "document" : "query",
         path: ref.path,
-        constraints: ref.type === 'document' ? [] : getQueryRef().constraints,
+        constraints: ref.type === "document" ? [] : getQueryRef().constraints,
       });
     }
   }
@@ -749,6 +821,6 @@ export function onSnapshot(
       window.clearTimeout(timer);
     }
     socketSubscriptions.delete(subscriptionId);
-    realtimeSocket?.emit('snapshot:unsubscribe', subscriptionId);
+    realtimeSocket?.emit("snapshot:unsubscribe", subscriptionId);
   };
 }

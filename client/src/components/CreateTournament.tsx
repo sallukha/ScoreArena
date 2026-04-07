@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { db, collection, addDoc, auth, getDocs, query, where, serverTimestamp, handleFirestoreError, OperationType } from '../firebase';
+import { db, collection, auth, getDocs, query, where, handleFirestoreError, OperationType } from '../firebase';
 import { ArrowLeft, Trophy, ChevronRight, Calendar, Users, FileText } from 'lucide-react';
 import { Team } from '../types';
+import { useCreateTournamentMutation } from '../features/tournaments/hooks/useTournamentMutations';
 
 const formats = ['League', 'Knockout', 'League + Knockout'];
 const oversOptions = [5, 6, 8, 10, 15, 20, 30, 50];
@@ -17,6 +18,7 @@ export const CreateTournament = ({ onBack }: { onBack: () => void }) => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const createTournamentMutation = useCreateTournamentMutation();
 
   useEffect(() => {
     const fetchTeams = async () => {
@@ -55,7 +57,7 @@ export const CreateTournament = ({ onBack }: { onBack: () => void }) => {
 
     setLoading(true);
     try {
-      await addDoc(collection(db, 'tournaments'), {
+      await createTournamentMutation.mutateAsync({
         name,
         city,
         startDate,
@@ -69,7 +71,6 @@ export const CreateTournament = ({ onBack }: { onBack: () => void }) => {
         teamCount: selectedTeamIds.length,
         playerCount,
         createdBy: auth.currentUser.uid,
-        createdAt: serverTimestamp(),
       });
       onBack();
     } catch (error) {
@@ -182,9 +183,8 @@ export const CreateTournament = ({ onBack }: { onBack: () => void }) => {
                 key={option}
                 type="button"
                 onClick={() => setOvers(option)}
-                className={`rounded-2xl px-3 py-3 text-sm font-black transition-all ${
-                  overs === option ? 'bg-black text-white' : 'bg-gray-50 border border-gray-100 text-gray-600'
-                }`}
+                className={`rounded-2xl px-3 py-3 text-sm font-black transition-all ${overs === option ? 'bg-black text-white' : 'bg-gray-50 border border-gray-100 text-gray-600'
+                  }`}
               >
                 {option}
               </button>
@@ -216,9 +216,8 @@ export const CreateTournament = ({ onBack }: { onBack: () => void }) => {
                     key={team.id}
                     type="button"
                     onClick={() => toggleTeam(team.id)}
-                    className={`rounded-3xl border p-4 text-left transition-all ${
-                      isSelected ? 'border-yellow-500 bg-yellow-50 shadow-sm' : 'border-gray-100 bg-white'
-                    }`}
+                    className={`rounded-3xl border p-4 text-left transition-all ${isSelected ? 'border-yellow-500 bg-yellow-50 shadow-sm' : 'border-gray-100 bg-white'
+                      }`}
                   >
                     <div className="flex items-center justify-between gap-4">
                       <div>
@@ -227,9 +226,8 @@ export const CreateTournament = ({ onBack }: { onBack: () => void }) => {
                           {(team.players || []).length} players in squad
                         </p>
                       </div>
-                      <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
-                        isSelected ? 'bg-black text-white' : 'bg-gray-100 text-gray-500'
-                      }`}>
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${isSelected ? 'bg-black text-white' : 'bg-gray-100 text-gray-500'
+                        }`}>
                         {isSelected ? 'Added' : 'Add Team'}
                       </span>
                     </div>

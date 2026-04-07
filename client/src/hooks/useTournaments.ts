@@ -1,50 +1,37 @@
-import { useEffect, useState } from "react";
-import {
-  db,
-  query,
-  collection,
-  orderBy,
-  onSnapshot,
-  limit,
-  handleFirestoreError,
-  OperationType,
-} from "../firebase";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { handleFirestoreError, OperationType } from "../firebase";
 import { Tournament } from "../types";
+import { subscribeTournaments } from "../features/tournaments/services/tournamentService";
 
 export function useTournaments(tournamentLimit?: number) {
-  const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const queryKey = ["tournaments", "list", tournamentLimit ?? "all"];
+
+  const tournamentsQuery = useQuery<Tournament[]>({
+    queryKey,
+    queryFn: async () => [],
+  });
 
   useEffect(() => {
-    setLoading(true);
-
-    const constraints = [orderBy("createdAt", "desc")];
-    if (typeof tournamentLimit === "number") {
-      constraints.push(limit(tournamentLimit) as any);
-    }
-
-    const q = query(collection(db, "tournaments"), ...(constraints as any));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        setTournaments(
-          snap.docs.map(
-            (tournamentDoc) =>
-              ({ id: tournamentDoc.id, ...tournamentDoc.data() }) as Tournament,
-          ),
-        );
-        setLoading(false);
+    const unsub = subscribeTournaments(
+      (nextTournaments: Tournament[]) => {
+        queryClient.setQueryData(queryKey, nextTournaments);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, "tournaments");
-        setLoading(false);
       },
+      tournamentLimit,
     );
 
     return () => {
       unsub();
     };
-  }, [tournamentLimit]);
+  }, [queryClient, tournamentLimit]);
 
-  return { tournaments, loading };
+  return {
+    tournaments: tournamentsQuery.data || [],
+    loading: tournamentsQuery.isLoading,
+    isError: tournamentsQuery.isError,
+  };
 }

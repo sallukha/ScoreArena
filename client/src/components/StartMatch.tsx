@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, collection, addDoc, auth, getDocs, query, where, serverTimestamp, handleFirestoreError, OperationType } from '../firebase';
+import { db, collection, auth, getDocs, query, where, handleFirestoreError, OperationType } from '../firebase';
 import { ArrowLeft, Trophy, ChevronRight, Users, Settings2 } from 'lucide-react';
 import { Team, Tournament } from '../types';
+import { useCreateMatchMutation } from '../features/matches/hooks/useMatchMutations';
 
 export const StartMatch = ({ onBack, onStart }: { onBack: () => void, onStart: (id: string) => void }) => {
   const [teamA, setTeamA] = useState('');
@@ -11,6 +12,7 @@ export const StartMatch = ({ onBack, onStart }: { onBack: () => void, onStart: (
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [tournamentId, setTournamentId] = useState('');
   const [loading, setLoading] = useState(false);
+  const createMatchMutation = useCreateMatchMutation();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,17 +52,16 @@ export const StartMatch = ({ onBack, onStart }: { onBack: () => void, onStart: (
         teamA,
         teamB,
         tournamentId,
-        status: 'live',
+        status: 'live' as const,
         overs,
         scoreA: { runs: 0, wickets: 0, overs: 0, balls: 0, extras: 0 },
         scoreB: { runs: 0, wickets: 0, overs: 0, balls: 0, extras: 0 },
         currentInnings: 1,
         playerStats: {},
         createdBy: auth.currentUser.uid,
-        createdAt: serverTimestamp(),
       };
-      const docRef = await addDoc(collection(db, 'matches'), matchData);
-      onStart(docRef.id);
+      const matchId = await createMatchMutation.mutateAsync(matchData as any);
+      onStart(matchId);
     } catch (error) {
       console.error('Error starting match:', error);
       handleFirestoreError(error, OperationType.CREATE, 'matches');
@@ -145,9 +146,8 @@ export const StartMatch = ({ onBack, onStart }: { onBack: () => void, onStart: (
                   key={o}
                   type="button"
                   onClick={() => setOvers(o)}
-                  className={`py-3 rounded-xl border text-sm font-bold transition-all ${
-                    overs === o ? 'bg-yellow-500 border-yellow-500 text-black shadow-lg shadow-yellow-500/20' : 'bg-white border-gray-100 text-gray-500'
-                  }`}
+                  className={`py-3 rounded-xl border text-sm font-bold transition-all ${overs === o ? 'bg-yellow-500 border-yellow-500 text-black shadow-lg shadow-yellow-500/20' : 'bg-white border-gray-100 text-gray-500'
+                    }`}
                 >
                   {o}
                 </button>

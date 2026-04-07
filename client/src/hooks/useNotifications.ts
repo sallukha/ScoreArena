@@ -1,57 +1,42 @@
-import { useEffect, useState } from "react";
-import {
-  db,
-  query,
-  collection,
-  where,
-  orderBy,
-  onSnapshot,
-  limit,
-  handleFirestoreError,
-  OperationType,
-} from "../firebase";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { handleFirestoreError, OperationType } from "../firebase";
+import { subscribeNotifications } from "../features/auth/services/notificationService";
 
 export function useNotifications(userId?: string) {
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const queryKey = ["notifications", "byUser", userId || "anonymous"];
+
+  const notificationsQuery = useQuery<any[]>({
+    queryKey,
+    queryFn: async () => [],
+    enabled: Boolean(userId),
+  });
 
   useEffect(() => {
     if (!userId) {
-      setNotifications([]);
-      setLoading(false);
+      queryClient.setQueryData(queryKey, []);
       return;
     }
 
-    setLoading(true);
-
-    const qNotif = query(
-      collection(db, "notifications"),
-      where("userId", "==", userId),
-      orderBy("timestamp", "desc"),
-      limit(20),
-    );
-
-    const unsubNotif = onSnapshot(
-      qNotif,
-      (snap) => {
-        setNotifications(
-          snap.docs.map((notifDoc) => ({
-            id: notifDoc.id,
-            ...notifDoc.data(),
-          })),
-        );
-        setLoading(false);
+    const unsubNotif = subscribeNotifications(
+      userId,
+      (nextNotifications) => {
+        queryClient.setQueryData(queryKey, nextNotifications);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, "notifications");
-        setLoading(false);
       },
     );
 
     return () => {
       unsubNotif();
     };
-  }, [userId]);
+  }, [queryClient, userId]);
 
-  return { notifications, loading };
+  return {
+    notifications: notificationsQuery.data || [],
+    loading: notificationsQuery.isLoading,
+    isError: notificationsQuery.isError,
+  };
 }

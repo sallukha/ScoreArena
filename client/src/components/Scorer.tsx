@@ -1,23 +1,26 @@
 import { useState, useEffect } from 'react';
-import { db, doc, updateDoc, collection, addDoc, onSnapshot, auth, getDoc, handleFirestoreError, OperationType, getDocs, query, where, orderBy, increment, deleteDoc, limit, serverTimestamp } from '../firebase';
+import { db, doc, collection, onSnapshot, auth, getDoc, handleFirestoreError, OperationType, getDocs, query, where, orderBy, increment, limit } from '../firebase';
 import { ArrowLeft, ChevronRight, User, Settings2, History, CheckCircle2, Search, RotateCcw, XCircle, AlertCircle, Trophy, Star, Target } from 'lucide-react';
 import { Match, Team, Player } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { MilestonePoster } from './MilestonePoster';
+import { useCreateMatchBallMutation, useDeleteMatchBallMutation, useUpdateMatchMutation } from '../features/matches/hooks/useMatchMutations';
+import { useCreatePlayerMutation, useUpdatePlayerMutation } from '../features/players/hooks/usePlayerMutations';
+import { useUpdateTeamMutation } from '../features/teams/hooks/useTeamMutations';
 
-const PlayerSelectionModal = ({ 
-  isOpen, 
-  onClose, 
-  players, 
-  onSelect, 
+const PlayerSelectionModal = ({
+  isOpen,
+  onClose,
+  players,
+  onSelect,
   title,
   selectedIds = [],
   onAddPlayer
-}: { 
-  isOpen: boolean, 
-  onClose: () => void, 
-  players: Player[], 
-  onSelect: (id: string) => void, 
+}: {
+  isOpen: boolean,
+  onClose: () => void,
+  players: Player[],
+  onSelect: (id: string) => void,
   title: string,
   selectedIds?: string[],
   onAddPlayer?: (name: string) => void
@@ -51,7 +54,7 @@ const PlayerSelectionModal = ({
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-black italic uppercase tracking-tight text-gray-900">{title}</h3>
                 {!isAdding && onAddPlayer && (
-                  <button 
+                  <button
                     onClick={() => setIsAdding(true)}
                     className="text-[10px] font-black uppercase tracking-widest text-yellow-600 bg-yellow-50 px-3 py-1.5 rounded-full border border-yellow-100"
                   >
@@ -71,13 +74,13 @@ const PlayerSelectionModal = ({
                     className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-bold text-gray-800"
                   />
                   <div className="flex gap-3">
-                    <button 
+                    <button
                       onClick={() => setIsAdding(false)}
                       className="flex-1 py-3 rounded-xl font-bold text-gray-500 bg-gray-50 uppercase text-[10px] tracking-widest"
                     >
                       Cancel
                     </button>
-                    <button 
+                    <button
                       onClick={() => {
                         if (newName.trim()) {
                           onAddPlayer(newName.trim());
@@ -104,7 +107,7 @@ const PlayerSelectionModal = ({
                 </div>
               )}
             </div>
-            
+
             {!isAdding && (
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
                 {filtered.map(player => (
@@ -112,9 +115,8 @@ const PlayerSelectionModal = ({
                     key={player.id}
                     onClick={() => { onSelect(player.id); onClose(); }}
                     disabled={selectedIds.includes(player.id)}
-                    className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                      selectedIds.includes(player.id) ? 'opacity-40 bg-gray-50' : 'bg-white border-gray-100 hover:border-yellow-500 active:scale-95'
-                    }`}
+                    className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${selectedIds.includes(player.id) ? 'opacity-40 bg-gray-50' : 'bg-white border-gray-100 hover:border-yellow-500 active:scale-95'
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center font-bold text-yellow-600">
@@ -142,14 +144,14 @@ const PlayerSelectionModal = ({
   );
 };
 
-const WicketModal = ({ 
-  isOpen, 
-  onClose, 
+const WicketModal = ({
+  isOpen,
+  onClose,
   onSelect,
   players
-}: { 
-  isOpen: boolean, 
-  onClose: () => void, 
+}: {
+  isOpen: boolean,
+  onClose: () => void,
   onSelect: (type: string, fielderId?: string) => void,
   players: Player[]
 }) => {
@@ -185,15 +187,14 @@ const WicketModal = ({
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto" />
             <h3 className="text-xl font-black italic uppercase tracking-tight text-gray-900">How was the wicket?</h3>
-            
+
             <div className="grid grid-cols-2 gap-3">
               {types.map(t => (
                 <button
                   key={t.id}
                   onClick={() => setWicketType(t.id)}
-                  className={`py-4 rounded-2xl font-bold text-sm transition-all border ${
-                    wicketType === t.id ? 'bg-red-600 text-white border-red-600' : 'bg-gray-50 text-gray-700 border-gray-100'
-                  }`}
+                  className={`py-4 rounded-2xl font-bold text-sm transition-all border ${wicketType === t.id ? 'bg-red-600 text-white border-red-600' : 'bg-gray-50 text-gray-700 border-gray-100'
+                    }`}
                 >
                   {t.label}
                 </button>
@@ -203,7 +204,7 @@ const WicketModal = ({
             {(wicketType === 'caught' || wicketType === 'run-out' || wicketType === 'stumped') && (
               <div className="flex flex-col gap-3">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Select Fielder</p>
-                <select 
+                <select
                   value={fielderId}
                   onChange={(e) => setFielderId(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm font-medium"
@@ -230,14 +231,14 @@ const WicketModal = ({
   );
 };
 
-const ExtrasModal = ({ 
-  isOpen, 
-  onClose, 
-  onSelect 
-}: { 
-  isOpen: boolean, 
-  onClose: () => void, 
-  onSelect: (type: string, runs: number) => void 
+const ExtrasModal = ({
+  isOpen,
+  onClose,
+  onSelect
+}: {
+  isOpen: boolean,
+  onClose: () => void,
+  onSelect: (type: string, runs: number) => void
 }) => {
   const [type, setType] = useState('bye');
   const [runs, setRuns] = useState(0);
@@ -267,15 +268,14 @@ const ExtrasModal = ({
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto" />
             <h3 className="text-xl font-black italic uppercase tracking-tight text-gray-900">Select Extra Type</h3>
-            
+
             <div className="grid grid-cols-3 gap-3">
               {types.map(t => (
                 <button
                   key={t.id}
                   onClick={() => setType(t.id)}
-                  className={`py-4 rounded-2xl font-bold text-xs transition-all border ${
-                    type === t.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-700 border-gray-100'
-                  }`}
+                  className={`py-4 rounded-2xl font-bold text-xs transition-all border ${type === t.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-700 border-gray-100'
+                    }`}
                 >
                   {t.label}
                 </button>
@@ -289,9 +289,8 @@ const ExtrasModal = ({
                   <button
                     key={r}
                     onClick={() => setRuns(r)}
-                    className={`py-3 rounded-xl font-black text-lg transition-all border ${
-                      runs === r ? 'bg-black text-white' : 'bg-gray-50 text-gray-700 border-gray-100'
-                    }`}
+                    className={`py-3 rounded-xl font-black text-lg transition-all border ${runs === r ? 'bg-black text-white' : 'bg-gray-50 text-gray-700 border-gray-100'
+                      }`}
                   >
                     {r}
                   </button>
@@ -319,7 +318,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   const [battingPlayers, setBattingPlayers] = useState<Player[]>([]);
   const [bowlingPlayers, setBowlingPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [recentBalls, setRecentBalls] = useState<any[]>([]);
   const [selectionType, setSelectionType] = useState<'striker' | 'nonStriker' | 'bowler' | null>(null);
   const [isWicketModalOpen, setIsWicketModalOpen] = useState(false);
@@ -337,6 +336,12 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     bowlerName: string;
     scoreline: string;
   }>(null);
+  const updateMatchMutation = useUpdateMatchMutation();
+  const createMatchBallMutation = useCreateMatchBallMutation();
+  const deleteMatchBallMutation = useDeleteMatchBallMutation();
+  const createPlayerMutation = useCreatePlayerMutation();
+  const updatePlayerMutation = useUpdatePlayerMutation();
+  const updateTeamMutation = useUpdateTeamMutation();
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -390,25 +395,28 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       return;
     }
 
-    await updateDoc(doc(db, 'matches', matchId), {
-      scoreA: snapshotBefore.scoreA,
-      scoreB: snapshotBefore.scoreB,
-      status: snapshotBefore.status,
-      currentInnings: snapshotBefore.currentInnings,
-      playerStats: snapshotBefore.playerStats || {},
-      fallOfWickets: snapshotBefore.fallOfWickets || [],
-      recentBalls: snapshotBefore.recentBalls || [],
-      striker: snapshotBefore.striker || null,
-      strikerName: snapshotBefore.strikerName || null,
-      nonStriker: snapshotBefore.nonStriker || null,
-      nonStrikerName: snapshotBefore.nonStrikerName || null,
-      bowler: snapshotBefore.bowler || null,
-      bowlerName: snapshotBefore.bowlerName || null,
-      statsFinalized: false,
+    await updateMatchMutation.mutateAsync({
+      matchId,
+      payload: {
+        scoreA: snapshotBefore.scoreA,
+        scoreB: snapshotBefore.scoreB,
+        status: snapshotBefore.status,
+        currentInnings: snapshotBefore.currentInnings,
+        playerStats: snapshotBefore.playerStats || {},
+        fallOfWickets: snapshotBefore.fallOfWickets || [],
+        recentBalls: snapshotBefore.recentBalls || [],
+        striker: snapshotBefore.striker || null,
+        strikerName: snapshotBefore.strikerName || null,
+        nonStriker: snapshotBefore.nonStriker || null,
+        nonStrikerName: snapshotBefore.nonStrikerName || null,
+        bowler: snapshotBefore.bowler || null,
+        bowlerName: snapshotBefore.bowlerName || null,
+        statsFinalized: false,
+      },
     });
 
     for (const ball of ballsToDelete) {
-      await deleteDoc(doc(db, 'matches', matchId, 'balls', ball.id));
+      await deleteMatchBallMutation.mutateAsync({ matchId, ballId: ball.id });
     }
 
     setCorrectionMessage(message);
@@ -434,7 +442,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         console.log('Scorer: Match data received');
         const data = snap.data() as Match;
         setMatch({ id: snap.id, ...data });
-        
+
         // Fetch teams and their players
         const fetchTeamData = async () => {
           try {
@@ -456,26 +464,26 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
             const tAData = sA.data() as Team;
             const tBData = sB.data() as Team;
-            
+
             // Combine players from both match creator and current user
             const allPlayersMap = new Map<string, Player>();
             battingSnap.docs.forEach(d => allPlayersMap.set(d.id, { id: d.id, ...d.data() } as Player));
             bowlingSnap.docs.forEach(d => allPlayersMap.set(d.id, { id: d.id, ...d.data() } as Player));
-            
+
             const allPlayers = Array.from(allPlayersMap.values());
             console.log('Scorer: Total unique players fetched:', allPlayers.length);
-            
+
             const currentBattingTeamPlayers = (data.currentInnings === 1 ? tAData.players : tBData.players) || [];
             const currentBowlingTeamPlayers = (data.currentInnings === 1 ? tBData.players : tAData.players) || [];
 
             const bPlayers = allPlayers.filter(p => currentBattingTeamPlayers.includes(p.id));
             const boPlayers = allPlayers.filter(p => currentBowlingTeamPlayers.includes(p.id));
-            
+
             // If we still have missing players, try to fetch them by ID
             if (bPlayers.length < currentBattingTeamPlayers.length || boPlayers.length < currentBowlingTeamPlayers.length) {
               console.log('Scorer: Some players missing, fetching by ID...');
               const missingIds = [...currentBattingTeamPlayers, ...currentBowlingTeamPlayers].filter(id => !allPlayersMap.has(id));
-              
+
               // Fetch missing players in chunks of 10 (Firestore limit for 'in' query)
               for (let i = 0; i < missingIds.length; i += 10) {
                 const chunk = missingIds.slice(i, i + 10);
@@ -485,7 +493,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                   allPlayersMap.set(d.id, p);
                 });
               }
-              
+
               const updatedAllPlayers = Array.from(allPlayersMap.values());
               setBattingPlayers(updatedAllPlayers.filter(p => currentBattingTeamPlayers.includes(p.id)));
               setBowlingPlayers(updatedAllPlayers.filter(p => currentBowlingTeamPlayers.includes(p.id)));
@@ -514,15 +522,18 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   const updateMatchPlayer = async (type: 'striker' | 'nonStriker' | 'bowler', playerId: string) => {
     if (!match) return;
     console.log(`Scorer: Updating ${type} to ${playerId}`);
-    
+
     // Find player name
     const player = (type === 'bowler' ? bowlingPlayers : battingPlayers).find(p => p.id === playerId);
     const playerName = player ? player.name : 'Unknown';
 
     try {
-      await updateDoc(doc(db, 'matches', matchId), {
-        [type]: playerId,
-        [`${type}Name`]: playerName
+      await updateMatchMutation.mutateAsync({
+        matchId,
+        payload: {
+          [type]: playerId,
+          [`${type}Name`]: playerName,
+        },
       });
       console.log(`Scorer: ${type} updated successfully`);
     } catch (error) {
@@ -533,15 +544,14 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
   const handleQuickAddPlayer = async (name: string) => {
     if (!match || !auth.currentUser) return;
-    
+
     try {
       // 1. Create the player
-      const playerRef = await addDoc(collection(db, 'players'), {
+      const playerId = await createPlayerMutation.mutateAsync({
         name,
         role: 'All-rounder',
         stats: { runs: 0, wickets: 0, matches: 0, average: 0, strikeRate: 0, economy: 0 },
         createdBy: auth.currentUser.uid,
-        createdAt: serverTimestamp()
       } as any);
 
       // 2. Add to the correct team squad
@@ -553,15 +563,18 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       const teamSnap = await getDoc(teamRef);
       if (teamSnap.exists()) {
         const teamData = teamSnap.data() as Team;
-        const updatedPlayers = [...(teamData.players || []), playerRef.id];
-        await updateDoc(teamRef, { players: updatedPlayers });
+        const updatedPlayers = [...(teamData.players || []), playerId];
+        await updateTeamMutation.mutateAsync({
+          teamId: targetTeamId,
+          payload: { players: updatedPlayers },
+        });
       }
 
       // 3. Select the player automatically
       if (selectionType) {
-        await updateMatchPlayer(selectionType, playerRef.id);
+        await updateMatchPlayer(selectionType, playerId);
       }
-      
+
       setSelectionType(null);
     } catch (error) {
       console.error('Error quick adding player:', error);
@@ -585,18 +598,18 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       for (const playerId of playerIds) {
         const stats = playerStats[playerId];
         const playerRef = doc(db, 'players', playerId);
-        
+
         // Fetch current player to update highest score
         const playerSnap = await getDoc(playerRef);
         const currentStats = playerSnap.exists() ? (playerSnap.data().stats || {}) : {};
-        
+
         const newRuns = (currentStats.runs || 0) + (stats.runs || 0);
         const newMatches = (currentStats.matches || 0) + 1;
         const newBalls = (currentStats.balls || 0) + (stats.balls || 0);
         const newWickets = (currentStats.wickets || 0) + (stats.wickets || 0);
         const newBallsBowled = (currentStats.ballsBowled || 0) + (stats.ballsBowled || 0);
         const newRunsConceded = (currentStats.runsConceded || 0) + (stats.runsConceded || 0);
-        
+
         const average = newMatches > 0 ? (newRuns / newMatches) : 0;
         const strikeRate = newBalls > 0 ? ((newRuns / newBalls) * 100) : 0;
         const economy = newBallsBowled > 0 ? ((newRunsConceded / newBallsBowled) * 6) : 0;
@@ -604,26 +617,32 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         const isFifty = stats.runs >= 50 && stats.runs < 100;
         const isCentury = stats.runs >= 100;
 
-        await updateDoc(playerRef, {
-          'stats.matches': newMatches,
-          'stats.runs': newRuns,
-          'stats.wickets': newWickets,
-          'stats.fours': increment(stats.fours || 0),
-          'stats.sixes': increment(stats.sixes || 0),
-          'stats.fifties': increment(isFifty ? 1 : 0),
-          'stats.centuries': increment(isCentury ? 1 : 0),
-          'stats.balls': newBalls,
-          'stats.ballsBowled': newBallsBowled,
-          'stats.runsConceded': newRunsConceded,
-          'stats.average': average,
-          'stats.strikeRate': strikeRate,
-          'stats.economy': economy,
-          'stats.highestScore': Math.max(currentStats.highestScore || 0, stats.runs || 0)
+        await updatePlayerMutation.mutateAsync({
+          playerId,
+          payload: {
+            'stats.matches': newMatches,
+            'stats.runs': newRuns,
+            'stats.wickets': newWickets,
+            'stats.fours': increment(stats.fours || 0),
+            'stats.sixes': increment(stats.sixes || 0),
+            'stats.fifties': increment(isFifty ? 1 : 0),
+            'stats.centuries': increment(isCentury ? 1 : 0),
+            'stats.balls': newBalls,
+            'stats.ballsBowled': newBallsBowled,
+            'stats.runsConceded': newRunsConceded,
+            'stats.average': average,
+            'stats.strikeRate': strikeRate,
+            'stats.economy': economy,
+            'stats.highestScore': Math.max(currentStats.highestScore || 0, stats.runs || 0),
+          },
         });
       }
 
-      await updateDoc(doc(db, 'matches', matchId), {
-        statsFinalized: true
+      await updateMatchMutation.mutateAsync({
+        matchId,
+        payload: {
+          statsFinalized: true,
+        },
       });
     } catch (error) {
       console.error('Error finalizing match stats:', error);
@@ -693,7 +712,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           stats.ballsBowled = 0;
         }
       }
-      
+
       if (isExtra) {
         if (extraType === 'wide' || extraType === 'no-ball') {
           stats.runsConceded += (runs + 1);
@@ -709,15 +728,15 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       const stats = playerStats[strikerId];
       const oldRuns = stats.runs - runs;
       const newRunsTotal = stats.runs;
-      
+
       const checkMilestone = (val: number) => {
         if (oldRuns < val && newRunsTotal >= val && !shownMilestones.has(`${strikerId}-runs-${val}`)) {
           setMilestoneData({
             player: { name: match.strikerName || 'Batsman', team: battingTeam.name },
-            milestone: { 
-              type: 'runs', 
-              value: val, 
-              matchInfo: `${match.teamA} vs ${match.teamB}` 
+            milestone: {
+              type: 'runs',
+              value: val,
+              matchInfo: `${match.teamA} vs ${match.teamB}`
             }
           });
           setShownMilestones(prev => new Set(prev).add(`${strikerId}-runs-${val}`));
@@ -748,10 +767,10 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     try {
       setCorrectionMessage('');
       const snapshotBefore = createMatchSnapshot();
-      const isMatchOver = match.currentInnings === 2 && 
+      const isMatchOver = match.currentInnings === 2 &&
         (newRuns > match.scoreA.runs || (newOvers === match.overs && newBalls === 0));
-      
-      const isInningsOver = match.currentInnings === 1 && 
+
+      const isInningsOver = match.currentInnings === 1 &&
         (newOvers === match.overs && newBalls === 0);
 
       if (isInningsOver) {
@@ -764,37 +783,43 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       recentBalls.push({ runs, isExtra, extraType: extraType || null, isWicket: false });
       if (recentBalls.length > 12) recentBalls.shift();
 
-      await updateDoc(doc(db, 'matches', matchId), {
-        [currentScoreKey]: {
-          ...currentScore,
-          runs: newRuns,
-          balls: newBalls,
-          overs: newOvers,
-          extras: newExtras
+      await updateMatchMutation.mutateAsync({
+        matchId,
+        payload: {
+          [currentScoreKey]: {
+            ...currentScore,
+            runs: newRuns,
+            balls: newBalls,
+            overs: newOvers,
+            extras: newExtras,
+          },
+          status: isMatchOver ? 'completed' : 'live',
+          currentInnings: isInningsOver ? 2 : match.currentInnings,
+          playerStats,
+          recentBalls,
+          striker: newStriker,
+          strikerName: newStriker === strikerId ? (match.strikerName || null) : (newStriker === nonStrikerId ? (match.nonStrikerName || null) : null),
+          nonStriker: newNonStriker,
+          nonStrikerName: newNonStriker === nonStrikerId ? (match.nonStrikerName || null) : (newNonStriker === strikerId ? (match.strikerName || null) : null),
+          bowler: isInningsOver ? null : (bowlerId || null),
+          bowlerName: isInningsOver ? null : (match.bowlerName || null),
         },
-        status: isMatchOver ? 'completed' : 'live',
-        currentInnings: isInningsOver ? 2 : match.currentInnings,
-        playerStats,
-        recentBalls,
-        striker: newStriker,
-        strikerName: newStriker === strikerId ? (match.strikerName || null) : (newStriker === nonStrikerId ? (match.nonStrikerName || null) : null),
-        nonStriker: newNonStriker,
-        nonStrikerName: newNonStriker === nonStrikerId ? (match.nonStrikerName || null) : (newNonStriker === strikerId ? (match.strikerName || null) : null),
-        bowler: isInningsOver ? null : (bowlerId || null),
-        bowlerName: isInningsOver ? null : (match.bowlerName || null)
       });
 
       // Record ball
-      await addDoc(collection(db, 'matches', matchId, 'balls'), {
-        innings: match.currentInnings,
-        over: isLegalBall && newBalls === 0 ? newOvers - 1 : newOvers,
-        ball: isLegalBall && newBalls === 0 ? 6 : newBalls,
-        runs,
-        extraType: extraType || null,
-        batsman: strikerId || null,
-        bowler: bowlerId || null,
-        snapshotBefore,
-        timestamp: new Date()
+      await createMatchBallMutation.mutateAsync({
+        matchId,
+        payload: {
+          innings: match.currentInnings,
+          over: isLegalBall && newBalls === 0 ? newOvers - 1 : newOvers,
+          ball: isLegalBall && newBalls === 0 ? 6 : newBalls,
+          runs,
+          extraType: extraType || null,
+          batsman: strikerId || null,
+          bowler: bowlerId || null,
+          snapshotBefore,
+          timestamp: new Date(),
+        },
       });
 
       if (isLegalBall && newBalls === 0 && !isInningsOver && !isMatchOver) {
@@ -808,7 +833,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
   const handleWicket = async (type: string = 'bowled', fielderId?: string) => {
     if (!match) return;
-    
+
     if (!match.striker || !match.bowler) {
       alert('Please select striker and bowler first!');
       return;
@@ -819,7 +844,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
     const newWickets = currentScore.wickets + 1;
     const isLegalBall = type !== 'retired-hurt'; // Retired hurt doesn't count as a ball in some formats, but usually it's not a wicket either. Let's assume it's a wicket for simplicity.
-    
+
     let newBalls = currentScore.balls;
     let newOvers = currentScore.overs;
 
@@ -863,10 +888,10 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         if (stats.wickets === val && !shownMilestones.has(`${bowlerId}-wickets-${val}`)) {
           setMilestoneData({
             player: { name: match.bowlerName || 'Bowler', team: bowlingTeam.name },
-            milestone: { 
-              type: 'wickets', 
-              value: val, 
-              matchInfo: `${match.teamA} vs ${match.teamB}` 
+            milestone: {
+              type: 'wickets',
+              value: val,
+              matchInfo: `${match.teamA} vs ${match.teamB}`
             }
           });
           setShownMilestones(prev => new Set(prev).add(`${bowlerId}-wickets-${val}`));
@@ -900,37 +925,43 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     try {
       setCorrectionMessage('');
       const snapshotBefore = createMatchSnapshot();
-      await updateDoc(doc(db, 'matches', matchId), {
-        [currentScoreKey]: {
-          ...currentScore,
-          wickets: newWickets,
-          balls: newBalls,
-          overs: newOvers
+      await updateMatchMutation.mutateAsync({
+        matchId,
+        payload: {
+          [currentScoreKey]: {
+            ...currentScore,
+            wickets: newWickets,
+            balls: newBalls,
+            overs: newOvers,
+          },
+          status: isMatchOver ? 'completed' : 'live',
+          currentInnings: isInningsOver ? 2 : match.currentInnings,
+          playerStats,
+          fallOfWickets,
+          recentBalls,
+          striker: null,
+          strikerName: null,
+          nonStriker: isInningsOver ? null : (match.nonStriker || null),
+          nonStrikerName: isInningsOver ? null : (match.nonStrikerName || null),
+          bowler: isInningsOver ? null : (match.bowler || null),
+          bowlerName: isInningsOver ? null : (match.bowlerName || null),
         },
-        status: isMatchOver ? 'completed' : 'live',
-        currentInnings: isInningsOver ? 2 : match.currentInnings,
-        playerStats,
-        fallOfWickets,
-        recentBalls,
-        striker: null,
-        strikerName: null,
-        nonStriker: isInningsOver ? null : (match.nonStriker || null),
-        nonStrikerName: isInningsOver ? null : (match.nonStrikerName || null),
-        bowler: isInningsOver ? null : (match.bowler || null),
-        bowlerName: isInningsOver ? null : (match.bowlerName || null)
       });
 
       // Record ball as wicket
-      await addDoc(collection(db, 'matches', matchId, 'balls'), {
-        innings: match.currentInnings,
-        over: newBalls === 0 && isLegalBall ? newOvers - 1 : newOvers,
-        ball: newBalls === 0 && isLegalBall ? 6 : newBalls,
-        runs: 0,
-        wicket: { type, player: strikerId || null, fielder: fielderId || null },
-        batsman: strikerId || null,
-        bowler: bowlerId || null,
-        snapshotBefore,
-        timestamp: new Date()
+      await createMatchBallMutation.mutateAsync({
+        matchId,
+        payload: {
+          innings: match.currentInnings,
+          over: newBalls === 0 && isLegalBall ? newOvers - 1 : newOvers,
+          ball: newBalls === 0 && isLegalBall ? 6 : newBalls,
+          runs: 0,
+          wicket: { type, player: strikerId || null, fielder: fielderId || null },
+          batsman: strikerId || null,
+          bowler: bowlerId || null,
+          snapshotBefore,
+          timestamp: new Date(),
+        },
       });
 
       if (isLegalBall && newBalls === 0 && !isInningsOver && !isMatchOver) {
@@ -967,7 +998,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
       const scoreKey = lastBall.innings === 2 ? 'scoreB' : 'scoreA';
       const currentScore = (match as any)[scoreKey];
-      
+
       const isWideOrNoBall = lastBall.extraType === 'wide' || lastBall.extraType === 'no-ball';
       const extraRuns = lastBall.extraType ? (isWideOrNoBall ? Number(lastBall.runs || 0) + 1 : Number(lastBall.runs || 0)) : 0;
       const batterRuns = !lastBall.extraType || lastBall.extraType === 'no-ball' ? Number(lastBall.runs || 0) : 0;
@@ -1061,27 +1092,30 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       const shouldRestoreFirstInnings = lastBall.innings === 1 && match.currentInnings === 2;
       const shouldRestoreLive = match.status === 'completed';
 
-      await updateDoc(doc(db, 'matches', matchId), {
-        [scoreKey]: {
-          ...currentScore,
-          runs: Math.max(0, newRuns),
-          wickets: Math.max(0, newWickets),
-          balls: Math.max(0, newBalls),
-          overs: Math.max(0, newOvers),
-          extras: Math.max(0, newExtras)
+      await updateMatchMutation.mutateAsync({
+        matchId,
+        payload: {
+          [scoreKey]: {
+            ...currentScore,
+            runs: Math.max(0, newRuns),
+            wickets: Math.max(0, newWickets),
+            balls: Math.max(0, newBalls),
+            overs: Math.max(0, newOvers),
+            extras: Math.max(0, newExtras),
+          },
+          currentInnings: shouldRestoreFirstInnings ? 1 : match.currentInnings,
+          status: shouldRestoreLive ? 'live' : match.status,
+          playerStats,
+          fallOfWickets,
+          recentBalls: rebuiltRecentBalls,
+          striker: strikerId || null,
+          strikerName,
+          bowler: bowlerId || null,
+          bowlerName,
         },
-        currentInnings: shouldRestoreFirstInnings ? 1 : match.currentInnings,
-        status: shouldRestoreLive ? 'live' : match.status,
-        playerStats,
-        fallOfWickets,
-        recentBalls: rebuiltRecentBalls,
-        striker: strikerId || null,
-        strikerName,
-        bowler: bowlerId || null,
-        bowlerName,
       });
 
-      await deleteDoc(doc(db, 'matches', matchId, 'balls', lastBallId));
+      await deleteMatchBallMutation.mutateAsync({ matchId, ballId: lastBallId });
       setCorrectionMessage('Last ball hata diya gaya. Ab sahi ball dubara score kar do.');
       console.log('Last ball undone');
     } catch (error) {
@@ -1284,14 +1318,14 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={handleRefresh}
             className={`p-2 hover:bg-yellow-600 rounded-full transition-colors ${isRefreshing ? 'animate-spin' : ''}`}
             title="Refresh Data"
           >
             <RotateCcw size={20} />
           </button>
-          <button 
+          <button
             onClick={undoLastBall}
             className="p-2 hover:bg-yellow-600 rounded-full transition-colors"
             title="Undo Last Ball"
@@ -1318,12 +1352,12 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
             <p className="text-lg font-bold">{currentScore.extras}</p>
           </div>
         </div>
-        
+
         <div className="h-px bg-white/10" />
-        
+
         <div className="flex justify-between text-sm font-medium text-gray-400">
           <div className="flex gap-4">
-            <span className="text-yellow-500">CRR: {(currentScore.runs / (currentScore.overs + currentScore.balls/6) || 0).toFixed(2)}</span>
+            <span className="text-yellow-500">CRR: {(currentScore.runs / (currentScore.overs + currentScore.balls / 6) || 0).toFixed(2)}</span>
           </div>
           {match.currentInnings === 2 && (
             <span className="text-white font-bold">Target: {match.scoreA.runs + 1}</span>
@@ -1360,21 +1394,20 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                 initial={{ scale: 0, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 key={ball.id || i}
-                className={`min-w-[40px] h-10 rounded-full flex items-center justify-center font-black text-xs shadow-sm border-2 ${
-                  ball.wicket ? 'bg-red-600 text-white border-red-700' :
-                  ball.runs === 4 ? 'bg-green-500 text-white border-green-600' :
-                  ball.runs === 6 ? 'bg-purple-600 text-white border-purple-700' :
-                  ball.extraType === 'wide' ? 'bg-blue-500 text-white border-blue-600' :
-                  ball.extraType === 'no-ball' ? 'bg-orange-500 text-white border-orange-600' :
-                  ball.extraType ? 'bg-blue-50 text-blue-600 border-blue-200' :
-                  'bg-gray-100 text-gray-800 border-gray-200'
-                }`}
+                className={`min-w-[40px] h-10 rounded-full flex items-center justify-center font-black text-xs shadow-sm border-2 ${ball.wicket ? 'bg-red-600 text-white border-red-700' :
+                    ball.runs === 4 ? 'bg-green-500 text-white border-green-600' :
+                      ball.runs === 6 ? 'bg-purple-600 text-white border-purple-700' :
+                        ball.extraType === 'wide' ? 'bg-blue-500 text-white border-blue-600' :
+                          ball.extraType === 'no-ball' ? 'bg-orange-500 text-white border-orange-600' :
+                            ball.extraType ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                              'bg-gray-100 text-gray-800 border-gray-200'
+                  }`}
               >
-                {ball.wicket ? 'W' : 
-                 ball.extraType === 'wide' ? `${ball.runs + 1}W` :
-                 ball.extraType === 'no-ball' ? `${ball.runs + 1}N` :
-                 ball.extraType ? `${ball.runs}${ball.extraType[0].toUpperCase()}` : 
-                 ball.runs}
+                {ball.wicket ? 'W' :
+                  ball.extraType === 'wide' ? `${ball.runs + 1}W` :
+                    ball.extraType === 'no-ball' ? `${ball.runs + 1}N` :
+                      ball.extraType ? `${ball.runs}${ball.extraType[0].toUpperCase()}` :
+                        ball.runs}
               </motion.div>
             ))}
             {/* Empty slots for remaining balls in over */}
@@ -1463,7 +1496,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
         {/* Batsmen & Bowler Section */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3">
-          <button 
+          <button
             onClick={() => setSelectionType('striker')}
             className={`flex justify-between items-center group p-2 rounded-xl transition-all ${!striker ? 'bg-red-50 border border-red-100 animate-pulse' : ''}`}
           >
@@ -1478,7 +1511,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
             <span className="font-black text-gray-900">{strikerStats.runs} ({strikerStats.balls})</span>
           </button>
           <div className="h-px bg-gray-50" />
-          <button 
+          <button
             onClick={() => setSelectionType('nonStriker')}
             className={`flex justify-between items-center group p-2 rounded-xl transition-all ${!nonStriker ? 'bg-red-50 border border-red-100 animate-pulse opacity-60' : 'opacity-60'}`}
           >
@@ -1496,7 +1529,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
         {/* Bowler Section */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3">
-          <button 
+          <button
             onClick={() => setSelectionType('bowler')}
             className={`flex justify-between items-center group p-2 rounded-xl transition-all ${!bowler ? 'bg-red-50 border border-red-100 animate-pulse' : ''}`}
           >
@@ -1521,20 +1554,19 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">This Over</h3>
             <div className="flex gap-2">
               {recentBalls.map((ball, i) => (
-                <div 
+                <div
                   key={ball.id || i}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-[10px] shadow-sm ${
-                    ball.extraType === 'wide' ? 'bg-blue-500 text-white border border-blue-600' :
-                    ball.extraType === 'no-ball' ? 'bg-orange-500 text-white border border-orange-600' :
-                    ball.runs === 4 ? 'bg-green-500 text-white' :
-                    ball.runs === 6 ? 'bg-purple-600 text-white' :
-                    ball.extraType ? 'bg-blue-50 text-blue-600 border border-blue-100' :
-                    'bg-gray-100 text-gray-800'
-                  }`}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-[10px] shadow-sm ${ball.extraType === 'wide' ? 'bg-blue-500 text-white border border-blue-600' :
+                      ball.extraType === 'no-ball' ? 'bg-orange-500 text-white border border-orange-600' :
+                        ball.runs === 4 ? 'bg-green-500 text-white' :
+                          ball.runs === 6 ? 'bg-purple-600 text-white' :
+                            ball.extraType ? 'bg-blue-50 text-blue-600 border border-blue-100' :
+                              'bg-gray-100 text-gray-800'
+                    }`}
                 >
-                  {ball.extraType === 'wide' ? `${ball.runs + 1}W` : 
-                   ball.extraType === 'no-ball' ? `${ball.runs + 1}N` : 
-                   ball.runs}
+                  {ball.extraType === 'wide' ? `${ball.runs + 1}W` :
+                    ball.extraType === 'no-ball' ? `${ball.runs + 1}N` :
+                      ball.runs}
                 </div>
               ))}
               {recentBalls.length === 0 && <span className="text-xs text-gray-300 italic">No balls yet</span>}
@@ -1557,7 +1589,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                   <h3 className="text-sm font-black uppercase tracking-widest text-gray-600">
                     Runs on {extraMode === 'wide' ? 'Wide' : 'No Ball'}
                   </h3>
-                  <button 
+                  <button
                     onClick={() => setExtraMode(null)}
                     className="text-xs font-black text-red-500 uppercase tracking-widest"
                   >
@@ -1591,11 +1623,10 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                   <button
                     key={run}
                     onClick={() => handleRun(run)}
-                    className={`h-16 rounded-2xl font-black text-xl shadow-sm active:scale-90 transition-all border-b-4 ${
-                      run === 4 ? 'bg-green-500 text-white border-green-700' :
-                      run === 6 ? 'bg-purple-600 text-white border-purple-800' :
-                      'bg-white text-gray-900 border-gray-200'
-                    }`}
+                    className={`h-16 rounded-2xl font-black text-xl shadow-sm active:scale-90 transition-all border-b-4 ${run === 4 ? 'bg-green-500 text-white border-green-700' :
+                        run === 6 ? 'bg-purple-600 text-white border-purple-800' :
+                          'bg-white text-gray-900 border-gray-200'
+                      }`}
                   >
                     {run}
                   </button>

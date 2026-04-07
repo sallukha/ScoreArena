@@ -1,17 +1,17 @@
 import { LayoutDashboard, Users, History, Trophy, User } from 'lucide-react';
 
-export const Navbar = ({ activeTab, setActiveTab }: { activeTab: string, setActiveTab: (tab: string) => void }) => {
-    const tabs = [
-        { id: 'home', icon: LayoutDashboard, label: 'Home' },
-        { id: 'teams', icon: Users, label: 'Teams' },
-        { id: 'myCricket', icon: History, label: 'My Cricket' },
-        { id: 'leaderboard', icon: Trophy, label: 'Leaders' },
-        { id: 'profile', icon: User, label: 'Profile' },
-    ];
+const NAV_ITEMS = [
+    { id: 'home', icon: LayoutDashboard, label: 'Home' },
+    { id: 'teams', icon: Users, label: 'Teams' },
+    { id: 'myCricket', icon: History, label: 'My Cricket' },
+    { id: 'leaderboard', icon: Trophy, label: 'Leaders' },
+    { id: 'profile', icon: User, label: 'Profile' },
+] as const;
 
+export const Navbar = ({ activeTab, setActiveTab }: { activeTab: string, setActiveTab: (tab: string) => void }) => {
     return (
         <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-3 py-2 flex justify-around items-end z-50">
-            {tabs.map((tab) => (
+            {NAV_ITEMS.map((tab) => (
                 <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}

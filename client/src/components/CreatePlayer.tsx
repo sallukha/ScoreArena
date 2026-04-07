@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { db, collection, addDoc, auth, handleFirestoreError, OperationType } from '../firebase';
+import { auth, handleFirestoreError, OperationType } from '../firebase';
 import { ArrowLeft, User, ChevronRight, Link2, Trophy } from 'lucide-react';
 import { Player } from '../types';
 import { findPlayersByPhone } from '../utils/playerLookup';
+import { useCreatePlayerMutation } from '../features/players/hooks/usePlayerMutations';
 
 export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
   const [name, setName] = useState('');
@@ -15,6 +16,7 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
   const [linkedPlayer, setLinkedPlayer] = useState<Player | null>(null);
   const [isCheckingPhone, setIsCheckingPhone] = useState(false);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const createPlayerMutation = useCreatePlayerMutation();
 
   const handlePhoneLookup = async (value: string) => {
     if (value.replace(/\D/g, '').length < 10) {
@@ -58,7 +60,7 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
         return;
       }
 
-      await addDoc(collection(db, 'players'), {
+      await createPlayerMutation.mutateAsync({
         name,
         email: email || null,
         phoneNumber: phoneNumber || null,
@@ -175,9 +177,8 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
                 key={r}
                 type="button"
                 onClick={() => setRole(r as Player['role'])}
-                className={`py-3 px-4 rounded-xl border text-sm font-bold transition-all ${
-                  role === r ? 'bg-yellow-500 border-yellow-500 text-black shadow-lg shadow-yellow-500/20' : 'bg-white border-gray-100 text-gray-500'
-                }`}
+                className={`py-3 px-4 rounded-xl border text-sm font-bold transition-all ${role === r ? 'bg-yellow-500 border-yellow-500 text-black shadow-lg shadow-yellow-500/20' : 'bg-white border-gray-100 text-gray-500'
+                  }`}
               >
                 {r}
               </button>

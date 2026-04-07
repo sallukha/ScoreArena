@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { db, collection, addDoc, auth, getDocs, query, where, handleFirestoreError, OperationType } from '../firebase';
+import { db, collection, auth, getDocs, query, where, handleFirestoreError, OperationType } from '../firebase';
 import { ArrowLeft, Users, ChevronRight, Search, CheckCircle2, Link2, Trophy } from 'lucide-react';
 import { Player } from '../types';
 import { findPlayersByPhone } from '../utils/playerLookup';
+import { useCreateTeamMutation } from '../features/teams/hooks/useTeamMutations';
 
 export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
   const [name, setName] = useState('');
@@ -13,6 +14,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
   const [search, setSearch] = useState('');
   const [isSearchingGlobal, setIsSearchingGlobal] = useState(false);
   const [linkedSearchPlayer, setLinkedSearchPlayer] = useState<Player | null>(null);
+  const createTeamMutation = useCreateTeamMutation();
 
   useEffect(() => {
     const fetchPlayers = async () => {
@@ -30,7 +32,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
     try {
       const globalPlayers = await findPlayersByPhone(search);
       setLinkedSearchPlayer(globalPlayers[0] || null);
-      
+
       // Merge with existing players, avoiding duplicates
       setAllPlayers(prev => {
         const existingIds = new Set(prev.map(p => p.id));
@@ -61,7 +63,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
 
     setLoading(true);
     try {
-      await addDoc(collection(db, 'teams'), {
+      await createTeamMutation.mutateAsync({
         name,
         players: selectedPlayers,
         captainId: captainId || '',
@@ -109,7 +111,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
             <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Select Players ({selectedPlayers.length})</label>
             <button type="button" className="text-yellow-600 text-xs font-bold uppercase tracking-tight">+ New Player</button>
           </div>
-          
+
           <div className="relative flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -121,7 +123,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
                 className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all text-sm font-medium"
               />
             </div>
-            <button 
+            <button
               type="button"
               onClick={handleGlobalSearch}
               disabled={isSearchingGlobal || search.length < 10}
@@ -159,34 +161,33 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
                 key={player.id}
                 type="button"
                 onClick={() => togglePlayer(player.id)}
-                className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                  selectedPlayers.includes(player.id) ? 'bg-yellow-50 border-yellow-500 shadow-sm' : 'bg-white border-gray-100'
-                }`}
-                >
+                className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${selectedPlayers.includes(player.id) ? 'bg-yellow-50 border-yellow-500 shadow-sm' : 'bg-white border-gray-100'
+                  }`}
+              >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center font-bold text-gray-400 overflow-hidden">
                     {player.name[0]}
                   </div>
-                    <div className="text-left">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-gray-800 text-sm">{player.name}</p>
-                        {captainId === player.id && (
-                          <span className="rounded-full bg-yellow-100 text-yellow-700 px-2 py-1 text-[9px] font-black uppercase tracking-widest">
-                            Captain
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{player.role}</p>
-                        {player.phoneNumber && (
-                          <p className="text-[10px] text-gray-400 font-medium tracking-tighter">{player.phoneNumber}</p>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-gray-400 font-bold mt-1">
-                        {player.stats?.matches || 0} M • {player.stats?.runs || 0} R • {player.stats?.wickets || 0} W
-                      </p>
+                  <div className="text-left">
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-gray-800 text-sm">{player.name}</p>
+                      {captainId === player.id && (
+                        <span className="rounded-full bg-yellow-100 text-yellow-700 px-2 py-1 text-[9px] font-black uppercase tracking-widest">
+                          Captain
+                        </span>
+                      )}
                     </div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{player.role}</p>
+                      {player.phoneNumber && (
+                        <p className="text-[10px] text-gray-400 font-medium tracking-tighter">{player.phoneNumber}</p>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-gray-400 font-bold mt-1">
+                      {player.stats?.matches || 0} M • {player.stats?.runs || 0} R • {player.stats?.wickets || 0} W
+                    </p>
                   </div>
+                </div>
                 {selectedPlayers.includes(player.id) && <CheckCircle2 size={20} className="text-yellow-600" />}
               </button>
             ))}
