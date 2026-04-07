@@ -1,5 +1,5 @@
 const LOCAL_API_FALLBACK = 'http://127.0.0.1:3000/api';
-const EMULATOR_API = 'http://10.0.2.2:3000/api'; // Android emulator special IP
+const EMULATOR_API = 'http://10.0.2.2:3000/api';
 
 function trimTrailingSlash(value: string) {
   return value.replace(/\/$/, '');
@@ -21,8 +21,6 @@ export function getApiBaseUrl() {
 
   // Check if running in mobile app
   if (isMobileApp()) {
-    // Try to detect if running in Android emulator
-    // In emulator, use special IP 10.0.2.2; on device, try to detect IP
     console.log('Mobile app detected, using emulator backend:', EMULATOR_API);
     return EMULATOR_API;
   }
@@ -30,7 +28,6 @@ export function getApiBaseUrl() {
   const hostname = window.location.hostname;
   const protocol = window.location.protocol;
 
-  // For localhost/127.0.0.1 development, always use the backend server on port 3000
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     console.log('Web localhost detected, using local backend:', LOCAL_API_FALLBACK);
     return LOCAL_API_FALLBACK;

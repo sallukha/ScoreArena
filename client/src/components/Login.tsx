@@ -74,17 +74,14 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
     setLoading(true);
     setError(null);
     try {
-      console.log('--- Native Google Login Start ---');
+
       const result = await FirebaseAuthentication.signInWithGoogle();
 
       if (!result.user) {
         throw new Error('Google sign-in did not return a user');
       }
-
-      const pluginCredentialToken = (result as any)?.credential?.idToken;
-      const { token: fallbackToken } = await FirebaseAuthentication.getIdToken();
-      const idToken = pluginCredentialToken || fallbackToken;
-
+      const { token: idToken } = await FirebaseAuthentication.getIdToken();
+      localStorage.setItem('scorewala-auth-token', idToken);
       if (!idToken) {
         throw new Error('Firebase ID token not found after Google sign-in');
       }
