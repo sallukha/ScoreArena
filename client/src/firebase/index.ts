@@ -55,6 +55,16 @@ type AuthUser = {
   }>;
 };
 
+type FirebaseAuthExchangePayload = {
+  idToken: string;
+  displayName?: string;
+  email?: string;
+  phoneNumber?: string;
+  photoURL?: string;
+  providerId?: string;
+  googleId?: string;
+};
+
 declare global {
   interface Window {
     google?: any;
@@ -464,29 +474,49 @@ async function exchangeFirebaseSession(firebaseUser: any) {
     const idToken = await firebaseUser.getIdToken();
     console.log("Firebase ID token obtained");
 
-    const result = await baseApiFetch<{ user: AuthUser; token: string }>(
-      "/auth/firebase",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          idToken,
-          displayName: firebaseUser.displayName || "",
-          email: firebaseUser.email || "",
-          phoneNumber: firebaseUser.phoneNumber || "",
-          photoURL: firebaseUser.photoURL || "",
-        }),
-      },
-    );
+    const googleProvider = Array.isArray(firebaseUser?.providerData)
+      ? firebaseUser.providerData.find((provider: any) => provider?.providerId === "google.com")
+      : null;
 
-    console.log("Backend auth response received, storing session");
-    setCurrentUser(result.user, result.token);
-    console.log("User session stored successfully");
-
-    return { user: authStore.currentUser };
+    return await signInWithFirebaseIdToken({
+      idToken,
+      displayName: firebaseUser.displayName || "",
+      email: firebaseUser.email || "",
+      phoneNumber: firebaseUser.phoneNumber || "",
+      photoURL: firebaseUser.photoURL || "",
+      providerId: googleProvider?.providerId || "",
+      googleId: googleProvider?.uid || "",
+    });
   } catch (error) {
     console.error("Firebase session exchange failed:", error);
     throw error;
   }
+}
+
+export async function signInWithFirebaseIdToken(
+  payload: FirebaseAuthExchangePayload,
+) {
+  const result = await baseApiFetch<{ user: AuthUser; token: string }>(
+    "/auth/firebase",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        idToken: payload.idToken,
+        displayName: payload.displayName || "",
+        email: payload.email || "",
+        phoneNumber: payload.phoneNumber || "",
+        photoURL: payload.photoURL || "",
+        providerId: payload.providerId || "",
+        googleId: payload.googleId || "",
+      }),
+    },
+  );
+
+  console.log("Backend auth response received, storing session");
+  setCurrentUser(result.user, result.token);
+  console.log("User session stored successfully");
+
+  return { user: authStore.currentUser };
 }
 
 export const signInWithPhoneNumber = async (

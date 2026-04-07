@@ -157,12 +157,20 @@ export async function firebaseLogin(req: Request, res: Response) {
   }
 
   const phoneNumber = normalizePhoneNumber(req.body?.phoneNumber || firebaseUser.phoneNumber || '');
-  if (!phoneNumber) {
-    logger.warn('Firebase login attempted without phone number', { userUid: firebaseUser?.localId });
-    return res.status(400).json({ error: 'Phone number is required for phone authentication' });
-  }
+  const safeEmail = String(req.body?.email || firebaseUser.email || '').trim().toLowerCase();
+  const safeGoogleId = String(req.body?.googleId || '').trim();
+  const providerId = String(req.body?.providerId || '').trim().toLowerCase();
 
-  const uid = `phone_${phoneNumber.replace(/[^0-9]/g, '')}`;
+  const authProvider: 'phone' | 'google' =
+    phoneNumber || providerId.includes('phone') ? 'phone' : 'google';
+
+  const uid = phoneNumber
+    ? `phone_${phoneNumber.replace(/[^0-9]/g, '')}`
+    : safeGoogleId
+    ? `google_${safeGoogleId.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+    : safeEmail
+    ? `google_${safeEmail.replace(/[^a-z0-9]/g, '_')}`
+    : `firebase_${String(firebaseUser.localId || randomUUID())}`;
 
   try {
     const user = await (UserModel as any).findByIdAndUpdate(
@@ -171,23 +179,25 @@ export async function firebaseLogin(req: Request, res: Response) {
         _id: uid,
         uid,
         displayName:
-          String(req.body?.displayName || firebaseUser.displayName || '').trim() || `User_${phoneNumber.slice(-4)}`,
-        email: String(req.body?.email || firebaseUser.email || '').trim().toLowerCase(),
-        phoneNumber,
+          String(req.body?.displayName || firebaseUser.displayName || '').trim() ||
+          (phoneNumber ? `User_${phoneNumber.slice(-4)}` : safeEmail || 'ScoreArena User'),
+        email: safeEmail,
+        phoneNumber: phoneNumber || '',
         photoURL: String(req.body?.photoURL || firebaseUser.photoUrl || '').trim(),
-        authProvider: 'phone',
+        googleId: authProvider === 'google' ? safeGoogleId : '',
+        authProvider,
         role: 'user',
       },
       { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
     );
 
-    logger.info('User logged in via phone', { uid, phoneNumber });
+    logger.info('User logged in via Firebase', { uid, authProvider });
     return res.json(buildAuthResponse(user));
   } catch (error) {
-    logger.error('Database error during phone login', {
+    logger.error('Database error during firebase login', {
       error: error instanceof Error ? error.message : String(error),
       uid,
-      phoneNumber,
+      authProvider,
     });
     return res.status(500).json({
       error: 'Failed to create or update user. Please try again.',

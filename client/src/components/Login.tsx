@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { auth, RecaptchaVerifier, signInWithPhoneNumber, signIn } from '../firebase';
-import { motion, AnimatePresence } from 'framer-motion'; // Check if you use 'motion/react' or 'framer-motion'
+import { auth, RecaptchaVerifier, signInWithFirebaseIdToken, signInWithPhoneNumber } from '../firebase';
+// Capacitor Native Auth Plugin
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Phone, Mail, ArrowRight, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 async function waitForRecaptchaContainer(attempts = 10) {
@@ -67,19 +69,48 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
     }
   }, [method]);
 
+  // Exchange Firebase session with backend and store only server JWT.
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
     try {
-      await signIn();
+      console.log('--- Native Google Login Start ---');
+      const result = await FirebaseAuthentication.signInWithGoogle();
+
+      if (!result.user) {
+        throw new Error('Google sign-in did not return a user');
+      }
+
+      const pluginCredentialToken = (result as any)?.credential?.idToken;
+      const { token: fallbackToken } = await FirebaseAuthentication.getIdToken();
+      const idToken = pluginCredentialToken || fallbackToken;
+
+      if (!idToken) {
+        throw new Error('Firebase ID token not found after Google sign-in');
+      }
+
+      const profile = (result as any)?.additionalUserInfo?.profile || {};
+      await signInWithFirebaseIdToken({
+        idToken,
+        displayName: result.user.displayName || '',
+        email: result.user.email || '',
+        phoneNumber: result.user.phoneNumber || '',
+        photoURL: result.user.photoUrl || '',
+        providerId: 'google.com',
+        googleId: profile.sub || result.user.uid || '',
+      });
+
       onLoginSuccess();
     } catch (err: any) {
       console.error('Google login failed:', err);
-      setError(err?.message || 'Login failed');
+      if (err.code !== '1') { // 1 is user cancel
+        setError(err?.message || 'Login failed. Check SHA-1.');
+      }
     } finally {
       setLoading(false);
     }
   };
+
   const handleSendOtp = async () => {
     if (!phoneNumber) return;
     setLoading(true);
@@ -103,6 +134,7 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
     setLoading(true);
     try {
       await confirmationResult.confirm(otp);
+
       resetRecaptchaVerifier();
       onLoginSuccess();
     } catch (err: any) {
@@ -113,70 +145,70 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 gap-12">
-      <div className="text-center flex flex-col gap-4">
-        <div className="w-40 rounded-full overflow-hidden border-4 border-black bg-[#0f2f24] mx-auto shadow-2xl aspect-square ring-4 ring-yellow-200/70">
-          <img src="/scorewala-login-logo.jpg" alt="Logo" className="w-full h-full object-cover scale-110" />
-        </div>
-        <h1 className="text-4xl font-black italic uppercase tracking-tighter text-gray-900 mt-4">ScoreArena</h1>
-        <p className="text-gray-500 font-medium max-w-xs mx-auto">The #1 Cricket Scoring App.</p>
-      </div>
-
-      <div className="w-full max-w-sm flex flex-col gap-6">
-        <div className="flex bg-gray-100 p-1 rounded-2xl">
-          <button onClick={() => setMethod('google')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${method === 'google' ? 'bg-white shadow-sm text-black' : 'text-gray-500'}`}>
-            <Mail size={18} className="inline mr-2" /> Google
-          </button>
-          <button onClick={() => setMethod('phone')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${method === 'phone' ? 'bg-white shadow-sm text-black' : 'text-gray-500'}`}>
-            <Phone size={18} className="inline mr-2" /> Phone
-          </button>
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 gap-12">
+        <div className="text-center flex flex-col gap-4">
+          <div className="w-40 rounded-full overflow-hidden border-4 border-black bg-[#0f2f24] mx-auto shadow-2xl aspect-square ring-4 ring-yellow-200/70">
+            <img src="/scorewala-login-logo.jpg" alt="Logo" className="w-full h-full object-cover scale-110" />
+          </div>
+          <h1 className="text-4xl font-black italic uppercase tracking-tighter text-gray-900 mt-4">ScoreArena</h1>
+          <p className="text-gray-500 font-medium max-w-xs mx-auto">The #1 Cricket Scoring App.</p>
         </div>
 
-        <AnimatePresence mode="wait">
-          {method === 'google' ? (
-            <motion.div key="google" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <button
-                onClick={handleGoogleLogin}
-                disabled={loading}
-                className="w-full bg-yellow-500 text-black py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
-              >
-                {loading ? <div className="w-6 h-6 border-3 border-black border-t-transparent rounded-full animate-spin" /> : 
-                <><img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="G" /> Continue with Google</>}
-              </button>
-            </motion.div>
-          ) : (
-            <motion.div key="phone" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-4">
-              {step === 'phone' ? (
-                <>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">+91</span>
-                    <input type="tel" placeholder="Mobile Number" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="w-full bg-gray-50 border-2 rounded-2xl py-4 pl-14 pr-4 font-bold outline-none" />
-                  </div>
-                  <button onClick={handleSendOtp} disabled={loading || phoneNumber.length < 10} className="w-full bg-black text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 disabled:opacity-50">
-                    Send OTP <ArrowRight size={20} />
+        <div className="w-full max-w-sm flex flex-col gap-6">
+          <div className="flex bg-gray-100 p-1 rounded-2xl">
+            <button onClick={() => setMethod('google')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${method === 'google' ? 'bg-white shadow-sm text-black' : 'text-gray-500'}`}>
+              <Mail size={18} className="inline mr-2" /> Google
+            </button>
+            <button onClick={() => setMethod('phone')} className={`flex-1 py-3 rounded-xl font-bold text-sm ${method === 'phone' ? 'bg-white shadow-sm text-black' : 'text-gray-500'}`}>
+              <Phone size={18} className="inline mr-2" /> Phone
+            </button>
+          </div>
+
+          <AnimatePresence mode="wait">
+            {method === 'google' ? (
+                <motion.div key="google" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <button
+                      onClick={handleGoogleLogin}
+                      disabled={loading}
+                      className="w-full bg-yellow-500 text-black py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
+                  >
+                    {loading ? <div className="w-6 h-6 border-3 border-black border-t-transparent rounded-full animate-spin" /> :
+                        <><img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="G" /> Continue with Google</>}
                   </button>
-                </>
-              ) : (
-                <>
-                  <input type="text" placeholder="6-digit OTP" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} className="w-full bg-gray-50 border-2 rounded-2xl py-4 text-center text-2xl font-black tracking-widest outline-none" />
-                  <button onClick={handleVerifyOtp} className="w-full bg-yellow-500 text-black py-4 rounded-2xl font-bold flex items-center justify-center gap-3">
-                    Verify & Login <CheckCircle2 size={20} />
-                  </button>
-                </>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+                </motion.div>
+            ) : (
+                <motion.div key="phone" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-4">
+                  {step === 'phone' ? (
+                      <>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">+91</span>
+                          <input type="tel" placeholder="Mobile Number" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="w-full bg-gray-50 border-2 rounded-2xl py-4 pl-14 pr-4 font-bold outline-none" />
+                        </div>
+                        <button onClick={handleSendOtp} disabled={loading || phoneNumber.length < 10} className="w-full bg-black text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 disabled:opacity-50">
+                          Send OTP <ArrowRight size={20} />
+                        </button>
+                      </>
+                  ) : (
+                      <>
+                        <input type="text" placeholder="6-digit OTP" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value)} className="w-full bg-gray-50 border-2 rounded-2xl py-4 text-center text-2xl font-black tracking-widest outline-none" />
+                        <button onClick={handleVerifyOtp} className="w-full bg-yellow-500 text-black py-4 rounded-2xl font-bold flex items-center justify-center gap-3">
+                          Verify & Login <CheckCircle2 size={20} />
+                        </button>
+                      </>
+                  )}
+                </motion.div>
+            )}
+          </AnimatePresence>
 
-        <div id="recaptcha-container" className={`${method === 'phone' ? 'block' : 'hidden'}`}></div>
+          <div id="recaptcha-container" className={`${method === 'phone' ? 'block' : 'hidden'}`}></div>
 
-        {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold text-center border border-red-100">{error}</div>}
+          {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold text-center border border-red-100">{error}</div>}
 
-        <div className="flex items-center gap-2 justify-center text-gray-400 mt-4">
-          <ShieldCheck size={14} /> <span className="text-[10px] font-bold uppercase">Secure & Encrypted</span>
+          <div className="flex items-center gap-2 justify-center text-gray-400 mt-4">
+            <ShieldCheck size={14} /> <span className="text-[10px] font-bold uppercase">Secure & Encrypted</span>
+          </div>
         </div>
       </div>
-    </div>
   );
 };
 
