@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "838787006701",
+    "project_id": "fir-ath-d32b0",
+    "storage_bucket": "fir-ath-d32b0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:838787006701:android:496433bc9cb45343280ce4",
+        "android_client_info": {
+          "package_name": "com.scorewala.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "838787006701-1vrn9cml8psatgq8a64cgua9om6v40pf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.scorewala.app",
+            "certificate_hash": "cad9e79619210541d7534421355f57affd0de30f"
+          }
+        },
+        {
+          "client_id": "838787006701-9aii1bk6tjtouv8241h55ni5e8tesaue.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyClaObefHTKvPCuJCgmALIYXOtcSgYjktg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "838787006701-9aii1bk6tjtouv8241h55ni5e8tesaue.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
