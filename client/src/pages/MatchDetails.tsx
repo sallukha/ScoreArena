@@ -46,6 +46,69 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
     if (!match || !teamA || !teamB) return <div className="min-h-screen flex items-center justify-center"><div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
 
     const battingTeam = match.currentInnings === 1 ? teamA : teamB;
+    const getFielderName = (wicket: any) => wicket?.fielderName || (wicket?.fielder ? playerNames[wicket.fielder] : '');
+    const getDismissalSummary = (wicket: any) => {
+        if (!wicket) return '';
+        const bowlerName = playerNames[wicket.bowler] || 'Bowler';
+        const fielderName = getFielderName(wicket);
+        if (wicket.type === 'caught') return fielderName ? `c ${fielderName} b ${bowlerName}` : `caught b ${bowlerName}`;
+        if (wicket.type === 'stumped') return fielderName ? `st ${fielderName} b ${bowlerName}` : `stumped b ${bowlerName}`;
+        if (wicket.type === 'run-out') return fielderName ? `run out (${fielderName})` : 'run out';
+        if (wicket.type === 'lbw') return `lbw b ${bowlerName}`;
+        if (wicket.type === 'bowled') return `b ${bowlerName}`;
+        return `${wicket.type} b ${bowlerName}`;
+    };
+    const renderBowlingCard = (bowlingTeam: any, title: string) => {
+        const bowlingRows = (bowlingTeam?.players || [])
+            .map((id: string) => {
+                const stats = match.playerStats?.[id];
+                const totalBalls = Number(stats?.overs || 0) * 6 + Number(stats?.ballsBowled || 0);
+                if (!stats || totalBalls === 0) return null;
+                return { id, stats, totalBalls };
+            })
+            .filter(Boolean) as Array<{ id: string; stats: any; totalBalls: number }>;
+
+        return (
+            <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-gray-100">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">{title}</h3>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{bowlingTeam?.name || 'Team'}</span>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                        <thead className="text-gray-400 font-black uppercase tracking-widest border-b border-gray-50">
+                            <tr>
+                                <th className="pb-2">Bowler</th>
+                                <th className="pb-2 text-center">O</th>
+                                <th className="pb-2 text-center">R</th>
+                                <th className="pb-2 text-center">W</th>
+                                <th className="pb-2 text-right">Eco</th>
+                            </tr>
+                        </thead>
+                        <tbody className="font-bold text-gray-800">
+                            {bowlingRows.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="py-4 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                        No bowling data yet
+                                    </td>
+                                </tr>
+                            ) : (
+                                bowlingRows.map(({ id, stats, totalBalls }) => (
+                                    <tr key={id} className="border-b border-gray-50/50">
+                                        <td className="py-3 truncate max-w-[100px]">{playerNames[id] || `Player ${id.slice(0, 4)}`}</td>
+                                        <td className="py-3 text-center">{stats.overs}.{stats.ballsBowled}</td>
+                                        <td className="py-3 text-center">{stats.runsConceded}</td>
+                                        <td className="py-3 text-center text-red-600">{stats.wickets}</td>
+                                        <td className="py-3 text-right">{(stats.runsConceded / (totalBalls / 6)).toFixed(2)}</td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
 
     const handleShareMatch = async (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
@@ -268,7 +331,7 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                                                             <span className="truncate max-w-[100px] font-black text-gray-900">{playerNames[id] || `Player ${id.slice(0, 4)}`}{isCurrentlyBatting ? '*' : ''}</span>
                                                             <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">
                                                                 {isOut
-                                                                    ? `${isOut.type} b ${playerNames[isOut.bowler] || 'Bowler'} • ${s.runs} (${s.balls})`
+                                                                    ? `${getDismissalSummary(isOut)} • ${s.runs} (${s.balls})`
                                                                     : (isCurrentlyBatting ? 'Batting' : (s.balls > 0 ? 'Not Out' : 'Yet to bat'))}
                                                             </span>
                                                         </div>
@@ -331,7 +394,7 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                                                             <span className="truncate max-w-[100px] font-black text-gray-900">{playerNames[id] || `Player ${id.slice(0, 4)}`}{isCurrentlyBatting ? '*' : ''}</span>
                                                             <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">
                                                                 {isOut
-                                                                    ? `${isOut.type} b ${playerNames[isOut.bowler] || 'Bowler'} • ${s.runs} (${s.balls})`
+                                                                    ? `${getDismissalSummary(isOut)} • ${s.runs} (${s.balls})`
                                                                     : (isCurrentlyBatting ? 'Batting' : (s.balls > 0 ? 'Not Out' : 'Yet to bat'))}
                                                             </span>
                                                         </div>
@@ -364,39 +427,8 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                             )}
                         </div>
 
-                        <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-gray-100">
-                            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-6">Bowling</h3>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-xs">
-                                    <thead className="text-gray-400 font-black uppercase tracking-widest border-b border-gray-50">
-                                        <tr>
-                                            <th className="pb-2">Bowler</th>
-                                            <th className="pb-2 text-center">O</th>
-                                            <th className="pb-2 text-center">R</th>
-                                            <th className="pb-2 text-center">W</th>
-                                            <th className="pb-2 text-right">Eco</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="font-bold text-gray-800">
-                                        {Object.entries(match.playerStats || {}).map(([id, s]: any) => {
-                                            if (s.overs === 0 && s.ballsBowled === 0) return null;
-                                            const totalBalls = (s.overs * 6) + s.ballsBowled;
-                                            if (totalBalls === 0) return null;
-
-                                            return (
-                                                <tr key={id} className="border-b border-gray-50/50">
-                                                    <td className="py-3 truncate max-w-[100px]">{playerNames[id] || `Player ${id.slice(0, 4)}`}</td>
-                                                    <td className="py-3 text-center">{s.overs}.{s.ballsBowled}</td>
-                                                    <td className="py-3 text-center">{s.runsConceded}</td>
-                                                    <td className="py-3 text-center text-red-600">{s.wickets}</td>
-                                                    <td className="py-3 text-right">{(s.runsConceded / (totalBalls / 6)).toFixed(2)}</td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                        {renderBowlingCard(teamB, `${teamB.name} Bowling`)}
+                        {renderBowlingCard(teamA, `${teamA.name} Bowling`)}
                     </div>
                 )}
 

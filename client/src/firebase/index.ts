@@ -6,6 +6,7 @@ import {
   signInWithPhoneNumber as firebaseSignInWithPhoneNumber,
   signOut as firebaseSignOut,
 } from "firebase/auth";
+import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
 import { firebaseConfig } from "../config/firebase";
 import { getSocketBaseUrl } from "../api/config";
 import { AUTH_TOKEN_STORAGE_KEY, apiFetch as baseApiFetch } from "../api/http";
@@ -64,12 +65,6 @@ type FirebaseAuthExchangePayload = {
   providerId?: string;
   googleId?: string;
 };
-
-declare global {
-  interface Window {
-    google?: any;
-  }
-}
 
 const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const firebaseAuth = getFirebaseAuth(firebaseApp);
@@ -374,96 +369,6 @@ export const increment = (amount: number) => ({
   amount,
 });
 
-function loadGoogleScript() {
-  return new Promise<void>((resolve, reject) => {
-    if (window.google?.accounts?.oauth2) {
-      resolve();
-      return;
-    }
-
-    const existing = document.querySelector(
-      'script[data-google-identity="true"]',
-    );
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener(
-        "error",
-        () => reject(new Error("Failed to load Google script")),
-        { once: true },
-      );
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.dataset.googleIdentity = "true";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load Google script"));
-    document.head.appendChild(script);
-  });
-}
-
-async function signInWithGoogleOAuth() {
-  const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID;
-  if (!clientId) {
-    throw new Error(
-      "Google login is not configured. Set VITE_GOOGLE_CLIENT_ID in .env.",
-    );
-  }
-
-  await loadGoogleScript();
-
-  const accessToken = await new Promise<string>((resolve, reject) => {
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: "openid email profile",
-      callback: (response: any) => {
-        if (response?.access_token) {
-          resolve(response.access_token);
-          return;
-        }
-        reject(new Error(response?.error || "Google login failed"));
-      },
-      error_callback: (error: any) =>
-        reject(new Error(error?.message || "Google login failed")),
-    });
-
-    tokenClient.requestAccessToken({ prompt: "select_account" });
-  });
-
-  const googleProfile = await fetch(
-    "https://www.googleapis.com/oauth2/v3/userinfo",
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
-  ).then(async (response) => {
-    if (!response.ok) {
-      throw new Error("Failed to fetch Google profile");
-    }
-    return response.json();
-  });
-
-  const result = await apiFetch<{ user: AuthUser; token: string }>(
-    "/auth/google",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        googleId: googleProfile.sub,
-        displayName: googleProfile.name,
-        email: googleProfile.email,
-        photoURL: googleProfile.picture,
-      }),
-    },
-  );
-
-  setCurrentUser(result.user, result.token);
-  return { user: authStore.currentUser };
-}
-
 async function exchangeFirebaseSession(firebaseUser: any) {
   try {
     console.log(
@@ -553,7 +458,46 @@ export const signInWithPhoneNumber = async (
 };
 
 export const signIn = async () => {
-  return signInWithGoogleOAuth();
+  let result;
+  try {
+    result = await FirebaseAuthentication.signInWithGoogle();
+  } catch (primaryErr: any) {
+    const message = String(primaryErr?.message || "").toLowerCase();
+    const shouldFallback =
+      message.includes("no credentials available") ||
+      message.includes("getcredential") ||
+      message.includes("credential");
+
+    if (!shouldFallback) {
+      throw primaryErr;
+    }
+
+    // Fallback for Android devices where Credential Manager has no available account.
+    result = await FirebaseAuthentication.signInWithGoogle({
+      useCredentialManager: false,
+    });
+  }
+
+  if (!result.user) {
+    throw new Error("Google sign-in did not return a user");
+  }
+
+  const { token: idToken } = await FirebaseAuthentication.getIdToken();
+  if (!idToken) {
+    throw new Error("Firebase ID token not found after Google sign-in");
+  }
+
+  const profile = (result as any)?.additionalUserInfo?.profile || {};
+
+  return signInWithFirebaseIdToken({
+    idToken,
+    displayName: result.user.displayName || "",
+    email: result.user.email || "",
+    phoneNumber: result.user.phoneNumber || "",
+    photoURL: result.user.photoUrl || "",
+    providerId: "google.com",
+    googleId: profile.sub || result.user.uid || "",
+  });
 };
 
 export const logOut = async () => {

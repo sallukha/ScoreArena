@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { db, doc, collection, onSnapshot, auth, getDoc, handleFirestoreError, OperationType, getDocs, query, where, orderBy, increment, limit } from '../firebase';
 import { ArrowLeft, ChevronRight, User, Settings2, History, CheckCircle2, Search, RotateCcw, XCircle, AlertCircle, Trophy, Star, Target } from 'lucide-react';
 import { Match, Team, Player } from '../types';
@@ -157,6 +157,15 @@ const WicketModal = ({
 }) => {
   const [wicketType, setWicketType] = useState('');
   const [fielderId, setFielderId] = useState('');
+  const needsFielder = wicketType === 'caught' || wicketType === 'run-out' || wicketType === 'stumped';
+  const canConfirm = Boolean(wicketType) && (!needsFielder || Boolean(fielderId));
+
+  useEffect(() => {
+    if (!isOpen) {
+      setWicketType('');
+      setFielderId('');
+    }
+  }, [isOpen]);
 
   const types = [
     { id: 'bowled', label: 'Bowled' },
@@ -201,7 +210,7 @@ const WicketModal = ({
               ))}
             </div>
 
-            {(wicketType === 'caught' || wicketType === 'run-out' || wicketType === 'stumped') && (
+            {needsFielder && (
               <div className="flex flex-col gap-3">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Select Fielder</p>
                 <select
@@ -218,8 +227,8 @@ const WicketModal = ({
             )}
 
             <button
-              onClick={() => { onSelect(wicketType, fielderId); onClose(); }}
-              disabled={!wicketType}
+              onClick={() => { onSelect(wicketType, fielderId || undefined); onClose(); }}
+              disabled={!canConfirm}
               className="w-full bg-black text-white py-4 rounded-2xl font-black text-lg uppercase tracking-widest disabled:opacity-50"
             >
               Confirm Wicket
@@ -376,6 +385,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       scoreA: match.scoreA,
       scoreB: match.scoreB,
       status: match.status,
+      isFreeHit: Boolean((match as any).isFreeHit),
       currentInnings: match.currentInnings,
       playerStats: match.playerStats || {},
       fallOfWickets: match.fallOfWickets || [],
@@ -401,6 +411,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         scoreA: snapshotBefore.scoreA,
         scoreB: snapshotBefore.scoreB,
         status: snapshotBefore.status,
+        isFreeHit: Boolean(snapshotBefore.isFreeHit),
         currentInnings: snapshotBefore.currentInnings,
         playerStats: snapshotBefore.playerStats || {},
         fallOfWickets: snapshotBefore.fallOfWickets || [],
@@ -659,6 +670,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
     const currentScoreKey = match.currentInnings === 1 ? 'scoreA' : 'scoreB';
     const currentScore = match[currentScoreKey];
+    const isCurrentBallFreeHit = Boolean((match as any).isFreeHit);
 
     let newRuns = currentScore.runs;
     let newBalls = currentScore.balls;
@@ -764,6 +776,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       [newStriker, newNonStriker] = [newNonStriker, newStriker];
     }
 
+    let nextIsFreeHit = isCurrentBallFreeHit;
+    if (extraType === 'no-ball') {
+      nextIsFreeHit = true;
+    } else if (isLegalBall) {
+      nextIsFreeHit = false;
+    }
+
     try {
       setCorrectionMessage('');
       const snapshotBefore = createMatchSnapshot();
@@ -780,7 +799,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       }
 
       const recentBalls = [...(match.recentBalls || [])];
-      recentBalls.push({ runs, isExtra, extraType: extraType || null, isWicket: false });
+      recentBalls.push({
+        runs,
+        isExtra,
+        extraType: extraType || null,
+        isWicket: false,
+        freeHit: isCurrentBallFreeHit,
+      });
       if (recentBalls.length > 12) recentBalls.shift();
 
       await updateMatchMutation.mutateAsync({
@@ -794,6 +819,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
             extras: newExtras,
           },
           status: isMatchOver ? 'completed' : 'live',
+          isFreeHit: (isInningsOver || isMatchOver) ? false : nextIsFreeHit,
           currentInnings: isInningsOver ? 2 : match.currentInnings,
           playerStats,
           recentBalls,
@@ -815,6 +841,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           ball: isLegalBall && newBalls === 0 ? 6 : newBalls,
           runs,
           extraType: extraType || null,
+          freeHit: isCurrentBallFreeHit,
           batsman: strikerId || null,
           bowler: bowlerId || null,
           snapshotBefore,
@@ -841,6 +868,12 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
     const currentScoreKey = match.currentInnings === 1 ? 'scoreA' : 'scoreB';
     const currentScore = match[currentScoreKey];
+    const isCurrentBallFreeHit = Boolean((match as any).isFreeHit);
+
+    if (isCurrentBallFreeHit && type !== 'run-out' && type !== 'retired-hurt') {
+      alert('Free hit par sirf run-out allow hai.');
+      return;
+    }
 
     const newWickets = currentScore.wickets + 1;
     const isLegalBall = type !== 'retired-hurt'; // Retired hurt doesn't count as a ball in some formats, but usually it's not a wicket either. Let's assume it's a wicket for simplicity.
@@ -864,6 +897,9 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     const playerStats = { ...(match.playerStats || {}) };
     const strikerId = match.striker;
     const bowlerId = match.bowler;
+    const fielderName = fielderId
+      ? (bowlingPlayers.find((player) => player.id === fielderId)?.name || null)
+      : null;
 
     if (strikerId) {
       const stats = { ...(playerStats[strikerId] || { runs: 0, balls: 0, fours: 0, sixes: 0, overs: 0, ballsBowled: 0, runsConceded: 0, wickets: 0 }) };
@@ -912,6 +948,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         type,
         bowler: bowlerId || 'Unknown',
         fielder: fielderId || null,
+        fielderName: fielderName || undefined,
         score: currentScore.runs,
         balls: currentScore.balls + (currentScore.overs * 6),
         innings: match.currentInnings
@@ -919,7 +956,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     }
 
     const recentBalls = [...(match.recentBalls || [])];
-    recentBalls.push({ runs: 0, isWicket: true, wicketType: type });
+    recentBalls.push({
+      runs: 0,
+      isWicket: true,
+      wicketType: type,
+      wicketFielderName: fielderName,
+      freeHit: isCurrentBallFreeHit,
+    });
     if (recentBalls.length > 12) recentBalls.shift();
 
     try {
@@ -935,6 +978,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
             overs: newOvers,
           },
           status: isMatchOver ? 'completed' : 'live',
+          isFreeHit: (isInningsOver || isMatchOver) ? false : (isLegalBall ? false : isCurrentBallFreeHit),
           currentInnings: isInningsOver ? 2 : match.currentInnings,
           playerStats,
           fallOfWickets,
@@ -956,7 +1000,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           over: newBalls === 0 && isLegalBall ? newOvers - 1 : newOvers,
           ball: newBalls === 0 && isLegalBall ? 6 : newBalls,
           runs: 0,
-          wicket: { type, player: strikerId || null, fielder: fielderId || null },
+          wicket: {
+            type,
+            player: strikerId || null,
+            fielder: fielderId || null,
+            fielderName: fielderName || null,
+          },
+          freeHit: isCurrentBallFreeHit,
           batsman: strikerId || null,
           bowler: bowlerId || null,
           snapshotBefore,
@@ -1105,6 +1155,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           },
           currentInnings: shouldRestoreFirstInnings ? 1 : match.currentInnings,
           status: shouldRestoreLive ? 'live' : match.status,
+          isFreeHit: Boolean(lastBall.freeHit),
           playerStats,
           fallOfWickets,
           recentBalls: rebuiltRecentBalls,
@@ -1153,7 +1204,14 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
   const describeBall = (ball: any) => {
     if (!ball) return 'No last ball';
-    if (ball.wicket) return `Wicket${ball.wicket.type ? ` • ${ball.wicket.type}` : ''}`;
+    if (ball.wicket) {
+      const wicketType = String(ball.wicket.type || '');
+      const fielderName = ball.wicket.fielderName || ball.wicketFielderName || '';
+      if (wicketType === 'caught' && fielderName) return `Wicket • Caught by ${fielderName}`;
+      if (wicketType === 'run-out' && fielderName) return `Wicket • Run out by ${fielderName}`;
+      if (wicketType === 'stumped' && fielderName) return `Wicket • Stumped by ${fielderName}`;
+      return `Wicket${wicketType ? ` • ${wicketType}` : ''}`;
+    }
     if (ball.extraType === 'wide') return `${Number(ball.runs || 0) + 1} Wide`;
     if (ball.extraType === 'no-ball') return `${Number(ball.runs || 0) + 1} No Ball`;
     if (ball.extraType) return `${ball.runs} ${ball.extraType}`;
@@ -1178,6 +1236,9 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   const battingTeam = match.currentInnings === 1 ? teamA : teamB;
   const bowlingTeam = match.currentInnings === 1 ? teamB : teamA;
   const currentScore = match.currentInnings === 1 ? match.scoreA : match.scoreB;
+  const isFreeHitActive = Boolean((match as any).isFreeHit);
+  const isMatchTie = match.scoreA.runs === match.scoreB.runs;
+  const winningTeamName = match.scoreB.runs > match.scoreA.runs ? teamB.name : teamA.name;
 
   const striker = battingPlayers.find(p => p.id === match.striker);
   const nonStriker = battingPlayers.find(p => p.id === match.nonStriker);
@@ -1285,9 +1346,9 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
               <div className="h-1 w-12 bg-black mx-auto rounded-full mt-2" />
             </div>
             <div className="bg-black/5 p-6 rounded-[2rem] border border-black/10 w-full">
-              <p className="text-black font-black text-[10px] uppercase tracking-[0.2em] mb-2 opacity-60">Congratulations</p>
+              <p className="text-black font-black text-[10px] uppercase tracking-[0.2em] mb-2 opacity-60">{isMatchTie ? 'Result' : 'Congratulations'}</p>
               <p className="text-2xl font-black italic uppercase tracking-tighter text-black">
-                {match.scoreB.runs > match.scoreA.runs ? teamB?.name : teamA?.name} Wins!
+                {isMatchTie ? 'Match tie ho gaya!' : `${winningTeamName} Wins!`}
               </p>
             </div>
             <button
@@ -1358,6 +1419,11 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         <div className="flex justify-between text-sm font-medium text-gray-400">
           <div className="flex gap-4">
             <span className="text-yellow-500">CRR: {(currentScore.runs / (currentScore.overs + currentScore.balls / 6) || 0).toFixed(2)}</span>
+            {isFreeHitActive && (
+              <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-green-300">
+                Free Hit
+              </span>
+            )}
           </div>
           {match.currentInnings === 2 && (
             <span className="text-white font-bold">Target: {match.scoreA.runs + 1}</span>
@@ -1576,6 +1642,12 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
         {/* Scoring Buttons */}
         <div className="flex flex-col gap-4 mt-4">
+          {isFreeHitActive && (
+            <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-green-700">Free Hit Active</p>
+              <p className="mt-1 text-xs font-bold text-green-600">Is ball par sirf run-out wicket count hoga.</p>
+            </div>
+          )}
           <AnimatePresence mode="wait">
             {extraMode ? (
               <motion.div
@@ -1597,7 +1669,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                   </button>
                 </div>
                 <div className="grid grid-cols-5 gap-2">
-                  {[0, 1, 2, 3, 4].map(run => (
+                  {(extraMode === 'no-ball' ? [0, 1, 2, 3, 4, 5, 6] : [0, 1, 2, 3, 4]).map(run => (
                     <button
                       key={run}
                       onClick={() => {
@@ -1666,3 +1738,5 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     </div>
   );
 };
+
+

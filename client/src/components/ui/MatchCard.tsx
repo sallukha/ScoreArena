@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Share2 } from 'lucide-react';
 
 export const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams: Record<string, any>, onClick: (id: string) => void, isLive?: boolean, key?: any }) => {
@@ -23,6 +23,18 @@ export const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams
     const currentInnings = match.currentInnings === 2 ? 2 : 1;
     const inningWickets = (match.fallOfWickets || []).filter((w: any) => w.innings === currentInnings);
     const recentDismissals = inningWickets.slice(-3);
+    const getWicketFielderName = (wicket: any) => wicket?.fielderName || wicket?.fielder || '';
+    const getWicketSummary = (wicket: any) => {
+        if (!wicket) return '';
+        const bowler = wicket.bowlerName || wicket.bowler || 'Bowler';
+        const fielder = getWicketFielderName(wicket);
+        if (wicket.type === 'caught') return fielder ? `Caught by ${fielder}` : 'Caught';
+        if (wicket.type === 'stumped') return fielder ? `Stumped by ${fielder}` : 'Stumped';
+        if (wicket.type === 'run-out') return fielder ? `Run out by ${fielder}` : 'Run out';
+        if (wicket.type === 'lbw') return `LBW b ${bowler}`;
+        if (wicket.type === 'bowled') return `Bowled by ${bowler}`;
+        return `${wicket.type}${bowler ? ` • ${bowler}` : ''}`;
+    };
 
     return (
         <div
@@ -183,7 +195,7 @@ export const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams
                                                     {wicket.playerName || wicket.player || 'Batter Out'}
                                                 </p>
                                                 <p className="text-[10px] text-gray-500 font-bold truncate">
-                                                    {wicket.type}{wicket.bowlerName ? ` • ${wicket.bowlerName}` : ''} • {match.playerStats?.[wicket.player]?.runs || 0} ({match.playerStats?.[wicket.player]?.balls || 0})
+                                                    {getWicketSummary(wicket)} • {match.playerStats?.[wicket.player]?.runs || 0} ({match.playerStats?.[wicket.player]?.balls || 0})
                                                 </p>
                                             </div>
                                             <div className="text-[10px] font-black text-gray-500 shrink-0">

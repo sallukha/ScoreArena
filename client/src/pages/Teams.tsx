@@ -14,10 +14,18 @@ export const Teams = ({ onCreateTeam, onCreatePlayer, onTeamClick, liveMatches }
         const qPlayers = query(collection(db, 'players'), where('createdBy', '==', user.uid));
 
         const unsubTeams = onSnapshot(qTeams, (snap) => {
-            setTeams(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setTeams(
+                snap.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .filter((team: any) => team.scope !== 'tournament')
+            );
         });
         const unsubPlayers = onSnapshot(qPlayers, (snap) => {
-            setPlayers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setPlayers(
+                snap.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .filter((player: any) => player.scope !== 'tournament')
+            );
         });
 
         return () => { unsubTeams(); unsubPlayers(); };

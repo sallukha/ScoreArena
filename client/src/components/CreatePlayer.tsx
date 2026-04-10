@@ -28,7 +28,7 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
     setIsCheckingPhone(true);
     try {
       const players = await findPlayersByPhone(value);
-      const existingPlayer = players[0] || null;
+      const existingPlayer = players.find((player) => player.scope !== 'tournament') || null;
       setLinkedPlayer(existingPlayer);
 
       if (existingPlayer) {
@@ -68,6 +68,7 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
         battingStyle,
         bowlingStyle,
         createdBy: auth.currentUser.uid,
+        scope: 'general',
       });
       onBack();
     } catch (error) {

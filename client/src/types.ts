@@ -16,6 +16,8 @@ export interface Player {
   battingStyle?: string;
   bowlingStyle?: string;
   createdBy: string;
+  scope?: 'general' | 'tournament';
+  tournamentId?: string;
   stats?: {
     matches: number;
     runs: number;
@@ -41,6 +43,8 @@ export interface Team {
   players: string[]; // Array of player IDs
   captainId?: string;
   createdBy: string;
+  scope?: 'general' | 'tournament';
+  tournamentId?: string;
 }
 
 export interface Tournament {
@@ -55,6 +59,7 @@ export interface Tournament {
   overs?: number;
   description?: string;
   teams: string[]; // Array of team IDs
+  maxTeams?: number | null;
   teamCount?: number;
   playerCount?: number;
   createdBy: string;
@@ -86,6 +91,8 @@ export interface RecentBallEntry {
   extraType?: string | null;
   isWicket?: boolean;
   wicketType?: string;
+  wicketFielderName?: string | null;
+  freeHit?: boolean;
 }
 
 export interface Match {
@@ -113,10 +120,12 @@ export interface Match {
     type: string;
     bowler: string;
     fielder?: string;
+    fielderName?: string;
     score: number;
     balls: number;
     innings: number;
   }[];
+  isFreeHit?: boolean;
   createdBy: string;
   createdAt: any;
 }
@@ -132,7 +141,10 @@ export interface Ball {
   wicket?: {
     type: string;
     player: string;
+    fielder?: string | null;
+    fielderName?: string | null;
   };
+  freeHit?: boolean;
   batsman: string;
   bowler: string;
 }

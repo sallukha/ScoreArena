@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "838787006701-1vrn9cml8psatgq8a64cgua9om6v40pf.apps.googleusercontent.com",
+          "client_id": "838787006701-4pljrha0kch907fuef2ol1b7nu8lkv27.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.scorewala.app",
-            "certificate_hash": "cad9e79619210541d7534421355f57affd0de30f"
+            "certificate_hash": "9305e1809a74c969ecc241e7a2f24d736974cfa2"
           }
         },
         {

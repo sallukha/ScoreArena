@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import AppRoot from './app';
+import AppRoot from './app/index';
 import './index.css';
 
 if ('serviceWorker' in navigator) {

@@ -23,6 +23,7 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
   const [searchQuery, setSearchQuery] = useState('');
   const [phoneLookupQuery, setPhoneLookupQuery] = useState('');
   const [linkedPhonePlayer, setLinkedPhonePlayer] = useState<Player | null>(null);
+  const [addPlayerMessage, setAddPlayerMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const updateTeamMutation = useUpdateTeamMutation();
@@ -64,15 +65,19 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
   const addPlayerToTeam = async (playerId: string) => {
     if (!team) return;
     const currentPlayers = team.players || [];
-    if (currentPlayers.includes(playerId)) return;
+    if (currentPlayers.includes(playerId)) {
+      setAddPlayerMessage('Player already exists in this team.');
+      return;
+    }
 
     try {
       await updateTeamMutation.mutateAsync({
         teamId,
         payload: {
-          players: [...currentPlayers, playerId],
+          players: Array.from(new Set([...currentPlayers, playerId])),
         },
       });
+      setAddPlayerMessage('');
       setIsAddingPlayer(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `teams/${teamId}`);
@@ -116,6 +121,8 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
       const playerId = await createPlayerMutation.mutateAsync({
         name: newPlayerName.trim(),
         role: 'All-rounder',
+        scope: team.scope === 'tournament' ? 'tournament' : 'general',
+        tournamentId: team.scope === 'tournament' ? team.tournamentId : undefined,
         stats: { runs: 0, wickets: 0, matches: 0, average: 0, strikeRate: 0, economy: 0 },
         createdBy: auth.currentUser.uid,
       } as any);
@@ -124,10 +131,11 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
       await updateTeamMutation.mutateAsync({
         teamId,
         payload: {
-          players: [...currentPlayers, playerId],
+          players: Array.from(new Set([...currentPlayers, playerId])),
         },
       } as any);
 
+      setAddPlayerMessage('');
       setIsQuickAdding(false);
       setNewPlayerName('');
     } catch (error) {
@@ -149,10 +157,17 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
     }
   };
 
-  const filteredPlayers = allPlayers.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-    !team?.players?.includes(p.id)
-  );
+  const filteredPlayers = allPlayers.filter((p: any) => {
+    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const notInTeam = !team?.players?.includes(p.id);
+    const isTournamentTeam = team?.scope === 'tournament';
+
+    const scopeMatches = isTournamentTeam
+      ? p.scope === 'tournament' && p.tournamentId === team?.tournamentId
+      : p.scope !== 'tournament';
+
+    return matchesSearch && notInTeam && scopeMatches;
+  });
 
   if (loading) return <div className="p-8 text-center font-bold text-gray-400 uppercase tracking-widest">Loading Team...</div>;
   if (!team) return <div className="p-8 text-center font-bold text-red-500 uppercase tracking-widest">Team not found</div>;
@@ -207,7 +222,10 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
             <span className="w-1 h-4 bg-yellow-500 rounded-full"></span> Squad Members
           </h3>
           <button
-            onClick={() => setIsAddingPlayer(true)}
+            onClick={() => {
+              setAddPlayerMessage('');
+              setIsAddingPlayer(true);
+            }}
             className="flex items-center gap-1 text-yellow-600 text-xs font-black uppercase tracking-widest"
           >
             <UserPlus size={14} /> Add Player
@@ -294,12 +312,17 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                   {isQuickAdding ? 'Quick Add Player' : 'Select Player'}
                 </h3>
                 <button
-                  onClick={() => { setIsAddingPlayer(false); setIsQuickAdding(false); }}
+                  onClick={() => { setIsAddingPlayer(false); setIsQuickAdding(false); setAddPlayerMessage(''); }}
                   className="p-2 bg-gray-100 rounded-full"
                 >
                   <X size={20} />
                 </button>
               </div>
+              {addPlayerMessage && (
+                <div className="mb-4 rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-yellow-700">{addPlayerMessage}</p>
+                </div>
+              )}
 
               {isQuickAdding ? (
                 <div className="flex flex-col gap-4">
@@ -374,7 +397,7 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                         </div>
                         <p className="font-black text-gray-900 truncate">{linkedPhonePlayer.name}</p>
                         <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
-                          {linkedPhonePlayer.role} • {linkedPhonePlayer.stats?.matches || 0} M • {linkedPhonePlayer.stats?.runs || 0} R • {linkedPhonePlayer.stats?.wickets || 0} W
+                          {linkedPhonePlayer.role} | {linkedPhonePlayer.stats?.matches || 0} M | {linkedPhonePlayer.stats?.runs || 0} R | {linkedPhonePlayer.stats?.wickets || 0} W
                         </p>
                       </div>
                       <button
@@ -384,6 +407,13 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                       >
                         Add Player
                       </button>
+                    </div>
+                  )}
+                  {linkedPhonePlayer && team?.players?.includes(linkedPhonePlayer.id) && (
+                    <div className="mb-6 bg-gray-100 border border-gray-200 rounded-2xl p-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-600">
+                        {linkedPhonePlayer.name} is already in this team.
+                      </p>
                     </div>
                   )}
 
@@ -402,7 +432,7 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                             <p className="font-bold text-gray-900">{player.name}</p>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{player.role}</p>
                             <p className="text-[10px] text-gray-400 font-bold mt-1">
-                              {player.stats?.matches || 0} M • {player.stats?.runs || 0} R • {player.stats?.wickets || 0} W
+                              {player.stats?.matches || 0} M | {player.stats?.runs || 0} R | {player.stats?.wickets || 0} W
                             </p>
                           </div>
                         </div>

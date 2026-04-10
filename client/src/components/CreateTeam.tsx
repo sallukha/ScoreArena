@@ -21,7 +21,11 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
       if (!auth.currentUser) return;
       const q = query(collection(db, 'players'), where('createdBy', '==', auth.currentUser.uid));
       const snapshot = await getDocs(q);
-      setAllPlayers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player)));
+      setAllPlayers(
+        snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as Player))
+          .filter((player) => player.scope !== 'tournament')
+      );
     };
     fetchPlayers();
   }, []);
@@ -31,12 +35,13 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
     setIsSearchingGlobal(true);
     try {
       const globalPlayers = await findPlayersByPhone(search);
-      setLinkedSearchPlayer(globalPlayers[0] || null);
+      const nonTournamentPlayers = globalPlayers.filter((player) => player.scope !== 'tournament');
+      setLinkedSearchPlayer(nonTournamentPlayers[0] || null);
 
       // Merge with existing players, avoiding duplicates
       setAllPlayers(prev => {
         const existingIds = new Set(prev.map(p => p.id));
-        const newPlayers = globalPlayers.filter(p => !existingIds.has(p.id));
+        const newPlayers = nonTournamentPlayers.filter(p => !existingIds.has(p.id));
         return [...prev, ...newPlayers];
       });
     } catch (error) {
@@ -63,11 +68,13 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
 
     setLoading(true);
     try {
+      const uniqueSelectedPlayers = Array.from(new Set(selectedPlayers));
       await createTeamMutation.mutateAsync({
         name,
-        players: selectedPlayers,
+        players: uniqueSelectedPlayers,
         captainId: captainId || '',
         createdBy: auth.currentUser.uid,
+        scope: 'general',
       });
       onBack();
     } catch (error) {
@@ -142,15 +149,16 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
                 </div>
                 <p className="font-black text-gray-900 truncate">{linkedSearchPlayer.name}</p>
                 <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
-                  {linkedSearchPlayer.role} • {linkedSearchPlayer.stats?.runs || 0} Runs • {linkedSearchPlayer.stats?.wickets || 0} Wkts
+                  {linkedSearchPlayer.role} | {linkedSearchPlayer.stats?.runs || 0} Runs | {linkedSearchPlayer.stats?.wickets || 0} Wkts
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => togglePlayer(linkedSearchPlayer.id)}
-                className="shrink-0 bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                disabled={selectedPlayers.includes(linkedSearchPlayer.id)}
+                className="shrink-0 bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
               >
-                {selectedPlayers.includes(linkedSearchPlayer.id) ? 'Added' : 'Add'}
+                {selectedPlayers.includes(linkedSearchPlayer.id) ? 'Already Added' : 'Add'}
               </button>
             </div>
           )}
@@ -184,7 +192,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
                       )}
                     </div>
                     <p className="text-[10px] text-gray-400 font-bold mt-1">
-                      {player.stats?.matches || 0} M • {player.stats?.runs || 0} R • {player.stats?.wickets || 0} W
+                      {player.stats?.matches || 0} M | {player.stats?.runs || 0} R | {player.stats?.wickets || 0} W
                     </p>
                   </div>
                 </div>

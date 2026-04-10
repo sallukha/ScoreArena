@@ -51,6 +51,8 @@ export async function createPlayer(payload: {
   battingStyle?: string;
   bowlingStyle?: string;
   createdBy: string;
+  scope?: "general" | "tournament";
+  tournamentId?: string;
   stats?: Record<string, any>;
   createdAt?: any;
 }) {

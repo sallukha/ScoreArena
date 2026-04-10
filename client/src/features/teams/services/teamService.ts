@@ -34,6 +34,8 @@ export async function createTeam(payload: {
   players: string[];
   captainId: string;
   createdBy: string;
+  scope?: "general" | "tournament";
+  tournamentId?: string;
 }) {
   const docRef = await addDoc(collection(db, "teams"), payload);
   return docRef.id;

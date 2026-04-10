@@ -74,8 +74,23 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
     setLoading(true);
     setError(null);
     try {
+      let result;
+      try {
+        result = await FirebaseAuthentication.signInWithGoogle();
+      } catch (primaryErr: any) {
+        const message = String(primaryErr?.message || '').toLowerCase();
+        const shouldFallback =
+          message.includes('no credentials available') ||
+          message.includes('getcredential') ||
+          message.includes('credential');
 
-      const result = await FirebaseAuthentication.signInWithGoogle();
+        if (!shouldFallback) {
+          throw primaryErr;
+        }
+
+        // Fallback for Android devices where Credential Manager cannot return an account.
+        result = await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false });
+      }
 
       if (!result.user) {
         throw new Error('Google sign-in did not return a user');

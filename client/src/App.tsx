@@ -35,7 +35,7 @@ import { Tournaments as TournamentsPage } from './pages/Tournaments';
 import { Profile as ProfilePage } from './pages/Profile';
 import { MatchDetails as MatchDetailsPage } from './pages/MatchDetails';
 
-type ViewState = 'main' | 'create-team' | 'create-player' | 'start-match' | 'scorer' | 'create-tournament' | 'about' | 'help' | 'settings' | 'history' | 'matchDetails' | 'explore' | 'search' | 'leaderboard' | 'playerDetails' | 'teamDetails' | 'tournamentDetails';
+type ViewState = 'main' | 'create-team' | 'create-player' | 'start-match' | 'start-tournament-match' | 'scorer' | 'create-tournament' | 'about' | 'help' | 'settings' | 'history' | 'matchDetails' | 'explore' | 'search' | 'leaderboard' | 'playerDetails' | 'teamDetails' | 'tournamentDetails';
 
 const THEME_STORAGE_KEY = 'scorewala-theme';
 const WELCOME_SESSION_KEY_PREFIX = 'scorewala-welcome-shown';
@@ -85,7 +85,7 @@ const MainContent = () => {
 
   const { matches, recentMatches, userTeamIds, teams: userTeams } = useUserCricketData(user);
   const { globalMatches, teams: liveTeams } = useLiveMatches();
-  const { tournaments } = useTournaments(6);
+  const { tournaments } = useTournaments(6, user?.uid);
   const { notifications } = useNotifications(user?.uid);
   const teams = { ...liveTeams, ...userTeams };
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -110,6 +110,17 @@ const MainContent = () => {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const renderPage = () => {
+    const handleMatchClick = (id: string) => {
+      const allMatches = [...matches, ...recentMatches, ...globalMatches];
+      const match = allMatches.find((item) => item.id === id);
+      setActiveMatchId(id);
+      if (match?.status === 'live') {
+        setView('scorer');
+        return;
+      }
+      setView('matchDetails');
+    };
+
     if (view === 'search') return (
       <SearchPage
         onBack={() => setView('main')}
@@ -127,15 +138,38 @@ const MainContent = () => {
     );
     if (view === 'create-team') return <CreateTeam onBack={() => setView('main')} />;
     if (view === 'create-player') return <CreatePlayer onBack={() => setView('main')} />;
-    if (view === 'start-match') return <StartMatch onBack={() => setView('main')} onStart={(id) => { setActiveMatchId(id); setView('scorer'); }} />;
+    if (view === 'start-match') return <StartMatch mode="normal" onBack={() => setView('main')} onStart={(id) => { setActiveMatchId(id); setView('scorer'); }} />;
+    if (view === 'start-tournament-match') return (
+      <StartMatch
+        mode="tournament"
+        presetTournamentId={activeTournamentId || undefined}
+        onBack={() => {
+          setView('main');
+          setActiveTab('tournaments');
+        }}
+        onStart={(id) => { setActiveMatchId(id); setView('scorer'); }}
+      />
+    );
     if (view === 'create-tournament') return <CreateTournament onBack={() => setView('main')} />;
     if (view === 'tournamentDetails' && activeTournamentId) return (
       <TournamentDetails
         tournamentId={activeTournamentId}
-        onBack={() => setView('main')}
+        onBack={() => {
+          setView('main');
+          setActiveTab('tournaments');
+        }}
         onTeamClick={(id) => { setActiveMatchId(id); setView('teamDetails'); }}
         onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }}
-        onMatchClick={(id) => { setActiveMatchId(id); setView('matchDetails'); }}
+        onMatchClick={handleMatchClick}
+        onStartTournamentMatch={(id) => {
+          setActiveTournamentId(id);
+          setView('start-tournament-match');
+        }}
+        onDeleted={() => {
+          setActiveTournamentId(null);
+          setActiveTab('tournaments');
+          setView('main');
+        }}
       />
     );
     if (view === 'scorer' && activeMatchId) return <Scorer matchId={activeMatchId} onBack={() => setView('main')} />;
@@ -209,16 +243,6 @@ const MainContent = () => {
       </div>
     );
 
-    const handleMatchClick = (id: string) => {
-      const match = matches.find(m => m.id === id);
-      setActiveMatchId(id);
-      if (match && match.status === 'live') {
-        setView('scorer');
-      } else {
-        setView('matchDetails');
-      }
-    };
-
     switch (activeTab) {
       case 'home': return <HomePage onStartMatch={() => setView('start-match')} onMatchClick={handleMatchClick} onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }} matches={matches} recentMatches={recentMatches} globalMatches={globalMatches} teams={teams} tournaments={tournaments} userTeamIds={userTeamIds} />;
       case 'teams': return (
@@ -230,7 +254,16 @@ const MainContent = () => {
         />
       );
       case 'myCricket': return <MyCricketPage teams={teams} onMatchClick={handleMatchClick} />;
-      case 'tournaments': return <TournamentsPage onCreateTournament={() => setView('create-tournament')} onTournamentClick={(id) => { setActiveTournamentId(id); setView('tournamentDetails'); }} />;
+      case 'tournaments': return (
+        <TournamentsPage
+          onCreateTournament={() => setView('create-tournament')}
+          onTournamentClick={(id) => { setActiveTournamentId(id); setView('tournamentDetails'); }}
+          onStartTournamentScorer={() => {
+            setActiveTournamentId(null);
+            setView('start-tournament-match');
+          }}
+        />
+      );
       case 'leaderboard': return <Leaderboard onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }} />;
       case 'profile': return <ProfilePage />;
       default: return <HomePage onStartMatch={() => setView('start-match')} onMatchClick={handleMatchClick} onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }} matches={matches} recentMatches={recentMatches} globalMatches={globalMatches} teams={teams} tournaments={tournaments} userTeamIds={userTeamIds} />;

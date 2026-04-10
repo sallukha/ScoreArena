@@ -4,9 +4,9 @@ import { handleFirestoreError, OperationType } from "../firebase";
 import { Tournament } from "../types";
 import { subscribeTournaments } from "../features/tournaments/services/tournamentService";
 
-export function useTournaments(tournamentLimit?: number) {
+export function useTournaments(tournamentLimit?: number, createdBy?: string) {
   const queryClient = useQueryClient();
-  const queryKey = ["tournaments", "list", tournamentLimit ?? "all"];
+  const queryKey = ["tournaments", "list", tournamentLimit ?? "all", createdBy || "all-users"];
 
   const tournamentsQuery = useQuery<Tournament[]>({
     queryKey,
@@ -22,12 +22,13 @@ export function useTournaments(tournamentLimit?: number) {
         handleFirestoreError(error, OperationType.GET, "tournaments");
       },
       tournamentLimit,
+      createdBy,
     );
 
     return () => {
       unsub();
     };
-  }, [queryClient, tournamentLimit]);
+  }, [createdBy, queryClient, tournamentLimit]);
 
   return {
     tournaments: tournamentsQuery.data || [],
