@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "838787006701-4su2ucr8jed39ihjrqrs0nih2eo3hptp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.scorewala.app",
+            "certificate_hash": "01b591c6eaae2bb243c6f1337a8d22431224fa25"
+          }
+        },
+        {
           "client_id": "838787006701-9aii1bk6tjtouv8241h55ni5e8tesaue.apps.googleusercontent.com",
           "client_type": 3
         }
