@@ -70,58 +70,125 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
   }, [method]);
 
   // Exchange Firebase session with backend and store only server JWT.
+  // const handleGoogleLogin = async () => {
+  //   setLoading(true);
+  //   setError(null);
+
+  //   try {
+  //     let result;
+  //     try {
+  //       result = await FirebaseAuthentication.signInWithGoogle();
+  //     } catch (primaryErr: any) {
+  //       const message = String(primaryErr?.message || '').toLowerCase();
+  //       const shouldFallback =
+  //         message.includes('no credentials available') ||
+  //         message.includes('getcredential') ||
+  //         message.includes('credential');
+
+  //       if (!shouldFallback) {
+  //         throw primaryErr;
+  //       }
+
+  //       // Fallback for Android devices where Credential Manager cannot return an account.
+  //       result = await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false });
+  //     }
+
+  //     if (!result.user) {
+  //       throw new Error('Google sign-in did not return a user');
+  //     }
+  //     const { token: idToken } = await FirebaseAuthentication.getIdToken();
+  //     localStorage.setItem('scorewala-auth-token', idToken);
+  //     if (!idToken) {
+  //       throw new Error('Firebase ID token not found after Google sign-in');
+  //     }
+
+  //     const profile = (result as any)?.additionalUserInfo?.profile || {};
+  //     await signInWithFirebaseIdToken({
+  //       idToken,
+  //       displayName: result.user.displayName || '',
+  //       email: result.user.email || '',
+  //       phoneNumber: result.user.phoneNumber || '',
+  //       photoURL: result.user.photoUrl || '',
+  //       providerId: 'google.com',
+  //       googleId: profile.sub || result.user.uid || '',
+  //     });
+
+  //     onLoginSuccess();
+  //   } catch (err: any) {
+  //     console.error('Google login failed:', err);
+  //     if (err.code !== '1') { // 1 is user cancel
+  //       setError(err?.message || 'Login failed. Check SHA-1.');
+  //     }
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
   const handleGoogleLogin = async () => {
-    setLoading(true);
-    setError(null);
+  setLoading(true);
+  setError(null);
+
+  try {
+    let result;
     try {
-      let result;
-      try {
-        result = await FirebaseAuthentication.signInWithGoogle();
-      } catch (primaryErr: any) {
-        const message = String(primaryErr?.message || '').toLowerCase();
-        const shouldFallback =
-          message.includes('no credentials available') ||
-          message.includes('getcredential') ||
-          message.includes('credential');
+      result = await FirebaseAuthentication.signInWithGoogle();
+    } catch (primaryErr: any) {
+      const message = String(primaryErr?.message || '').toLowerCase();
+      const shouldFallback =
+        message.includes('no credentials available') ||
+        message.includes('getcredential') ||
+        message.includes('credential');
 
-        if (!shouldFallback) {
-          throw primaryErr;
-        }
+      if (!shouldFallback) throw primaryErr;
 
-        // Fallback for Android devices where Credential Manager cannot return an account.
-        result = await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false });
-      }
-
-      if (!result.user) {
-        throw new Error('Google sign-in did not return a user');
-      }
-      const { token: idToken } = await FirebaseAuthentication.getIdToken();
-      localStorage.setItem('scorewala-auth-token', idToken);
-      if (!idToken) {
-        throw new Error('Firebase ID token not found after Google sign-in');
-      }
-
-      const profile = (result as any)?.additionalUserInfo?.profile || {};
-      await signInWithFirebaseIdToken({
-        idToken,
-        displayName: result.user.displayName || '',
-        email: result.user.email || '',
-        phoneNumber: result.user.phoneNumber || '',
-        photoURL: result.user.photoUrl || '',
-        providerId: 'google.com',
-        googleId: profile.sub || result.user.uid || '',
+      result = await FirebaseAuthentication.signInWithGoogle({
+        useCredentialManager: false,
       });
-
-      onLoginSuccess();
-    } catch (err: any) {
-      console.error('Google login failed:', err);
-      if (err.code !== '1') { // 1 is user cancel
-        setError(err?.message || 'Login failed. Check SHA-1.');
-      }
-    } finally {
-      setLoading(false);
     }
-  };
+
+    if (!result?.user) {
+      throw new Error('Google sign-in did not return a user');
+    }
+
+    // ✅ Validate token BEFORE storing
+    const { token: idToken } = await FirebaseAuthentication.getIdToken();
+    if (!idToken) {
+      throw new Error('Firebase ID token not found after Google sign-in');
+    }
+    localStorage.setItem('scorewala-auth-token', idToken);
+
+    const profile = (result as any)?.additionalUserInfo?.profile || {};
+
+    // ✅ This fetch call is the likely source of "failed to fetch"
+    // Ensure the URL is HTTPS and reachable from the device
+    await signInWithFirebaseIdToken({
+      idToken,
+      displayName: result.user.displayName || '',
+      email: result.user.email || '',
+      phoneNumber: result.user.phoneNumber || '',
+      photoURL: result.user.photoUrl || '',   // ← lowercase L for Capacitor
+      providerId: 'google.com',
+      googleId: profile.sub || result.user.uid || '',
+    });
+
+    onLoginSuccess();
+  } catch (err: any) {
+    console.error('Google login failed:', err);
+
+    // ✅ Robust cancel detection
+    const isCancelled =
+      err.code === '1' ||
+      String(err?.message || '').toLowerCase().includes('cancel') ||
+      String(err?.message || '').toLowerCase().includes('closed by user');
+
+    if (!isCancelled) {
+      setError(err?.message || 'Login failed. Please try again.');
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleSendOtp = async () => {
     if (!phoneNumber) return;
