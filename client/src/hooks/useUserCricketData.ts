@@ -100,7 +100,7 @@ export function useUserCricketData(user: UserProfile | null) {
     );
 
     const unsubPlayer = subscribePrimaryPlayerByIdentity(
-      { phoneNumber: user.phoneNumber, email: user.email },
+      { uid: user.uid, phoneNumber: user.phoneNumber, email: user.email },
       (player) => {
         if (unsubscribeTeams) {
           unsubscribeTeams();

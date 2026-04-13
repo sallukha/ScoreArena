@@ -14,9 +14,12 @@ const ScoreSchema = new Schema(
 const FallOfWicketSchema = new Schema(
   {
     player: { type: String, required: true },
+    playerName: { type: String, default: '' },
     type: { type: String, required: true },
     bowler: { type: String, default: '' },
+    bowlerName: { type: String, default: '' },
     fielder: { type: String, default: '' },
+    fielderName: { type: String, default: '' },
     score: { type: Number, default: 0 },
     balls: { type: Number, default: 0 },
     innings: { type: Number, enum: [1, 2], required: true },

@@ -6,7 +6,6 @@ import {
   getDocs,
   query,
   where,
-  limit,
   handleFirestoreError,
   OperationType,
 } from '../firebase';
@@ -15,7 +14,7 @@ import { Team, Player } from '../types';
 import { useCreateTournamentMutation } from '../features/tournaments/hooks/useTournamentMutations';
 import { useCreateTeamMutation } from '../features/teams/hooks/useTeamMutations';
 import { useCreatePlayerMutation } from '../features/players/hooks/usePlayerMutations';
-import { findPlayersByPhone } from '../utils/playerLookup';
+import { findPlayersByContact, normalizeEmail, normalizePhone } from '../utils/playerLookup';
 
 const formats = ['League', 'Knockout', 'League + Knockout'];
 const oversOptions = [5, 6, 8, 10, 15, 20, 30, 50];
@@ -134,15 +133,7 @@ export const CreateTournament = ({ onBack }: { onBack: () => void }) => {
 
     setIsFindingContact(true);
     try {
-      let found: Player[] = [];
-      if (value.includes('@')) {
-        const byEmail = await getDocs(
-          query(collection(db, 'players'), where('email', '==', value), limit(5)),
-        );
-        found = byEmail.docs.map((playerDoc) => ({ id: playerDoc.id, ...playerDoc.data() } as Player));
-      } else {
-        found = await findPlayersByPhone(value);
-      }
+      const found = await findPlayersByContact(value);
       setContactFoundPlayer(found[0] || null);
       if (found[0]) {
         setNewPlayerName(found[0].name || '');
@@ -179,8 +170,8 @@ export const CreateTournament = ({ onBack }: { onBack: () => void }) => {
     try {
       const playerId = await createPlayerMutation.mutateAsync({
         name: newPlayerName.trim(),
-        email: newPlayerEmail.trim() || null,
-        phoneNumber: newPlayerPhone.trim() || null,
+        email: normalizeEmail(newPlayerEmail) || null,
+        phoneNumber: normalizePhone(newPlayerPhone) || null,
         role: newPlayerRole,
         battingStyle: 'Right Hand Bat',
         bowlingStyle: 'Right Arm Fast',
@@ -191,8 +182,8 @@ export const CreateTournament = ({ onBack }: { onBack: () => void }) => {
       const nextPlayer: Player = {
         id: playerId,
         name: newPlayerName.trim(),
-        email: newPlayerEmail.trim() || '',
-        phoneNumber: newPlayerPhone.trim() || '',
+        email: normalizeEmail(newPlayerEmail) || '',
+        phoneNumber: normalizePhone(newPlayerPhone) || '',
         role: newPlayerRole,
         battingStyle: 'Right Hand Bat',
         bowlingStyle: 'Right Arm Fast',

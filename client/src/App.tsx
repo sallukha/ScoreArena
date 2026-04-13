@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LogOut, Share2, Settings, History, Info, HelpCircle, Users, Trophy, ArrowLeft } from 'lucide-react';
+import { LogOut, Share2, Settings, History, Info, HelpCircle, Users, Trophy, ArrowLeft, Mail, MessageCircle } from 'lucide-react';
 import { CreatePlayer } from './components/CreatePlayer';
 import { CreateTeam } from './components/CreateTeam';
 import { StartMatch } from './components/StartMatch';
@@ -39,6 +39,9 @@ type ViewState = 'main' | 'create-team' | 'create-player' | 'start-match' | 'sta
 
 const THEME_STORAGE_KEY = 'scorewala-theme';
 const WELCOME_SESSION_KEY_PREFIX = 'scorewala-welcome-shown';
+const SUPPORT_EMAIL = 'scorewala55@gmail.com';
+const SUPPORT_EMAIL_HREF = `mailto:${SUPPORT_EMAIL}?subject=ScoreArena%20Support&body=Hi%20ScoreArena%20Support%2C%0A%0AMujhe%20app%20me%20help%20chahiye%3A%0A`;
+const SUPPORT_WHATSAPP_HREF = 'https://chat.whatsapp.com/Jre91XaWzECCc4yo38zJfu?mode=gi_t';
 
 function getWelcomeSessionKey(uid: string) {
   return `${WELCOME_SESSION_KEY_PREFIX}:${uid}`;
@@ -110,11 +113,16 @@ const MainContent = () => {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const renderPage = () => {
+    const canOpenScorer = (match: { status?: string; createdBy?: string } | undefined) => {
+      if (!match || match.status !== 'live' || !user) return false;
+      return match.createdBy === user.uid || user.role === 'admin';
+    };
+
     const handleMatchClick = (id: string) => {
       const allMatches = [...matches, ...recentMatches, ...globalMatches];
       const match = allMatches.find((item) => item.id === id);
       setActiveMatchId(id);
-      if (match?.status === 'live') {
+      if (canOpenScorer(match)) {
         setView('scorer');
         return;
       }
@@ -190,7 +198,7 @@ const MainContent = () => {
         <h2 className="text-2xl font-black italic uppercase text-gray-900 mb-6">Match History</h2>
         <div className="flex flex-col gap-4">
           {recentMatches.length > 0 ? recentMatches.map(match => (
-            <MatchCardUI key={match.id} match={match} teams={teams} onClick={(id) => { setActiveMatchId(id); setView('scorer'); }} />
+            <MatchCardUI key={match.id} match={match} teams={teams} onClick={handleMatchClick} />
           )) : (
             <div className="text-center py-12 bg-gray-50 rounded-3xl border border-dashed border-gray-200">
               <History size={48} className="mx-auto text-gray-200 mb-4" />
@@ -218,6 +226,41 @@ const MainContent = () => {
           <ArrowLeft size={16} /> Back
         </button>
         <h2 className="text-2xl font-black italic uppercase text-gray-900 mb-4">Help & Support</h2>
+        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5 flex flex-col gap-4">
+          <p className="text-sm font-bold text-gray-600 leading-relaxed">
+            Support ke liye humein email karo ya WhatsApp pe chat karo.
+          </p>
+
+          <a
+            href={SUPPORT_EMAIL_HREF}
+            className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 flex items-center justify-between gap-3 hover:border-yellow-300 hover:bg-yellow-50 transition-all"
+          >
+            <span className="flex items-center gap-3 min-w-0">
+              <Mail size={18} className="text-gray-500 shrink-0" />
+              <span className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Email Support</p>
+                <p className="text-sm font-black text-gray-900 truncate">{SUPPORT_EMAIL}</p>
+              </span>
+            </span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-yellow-700 shrink-0">Open</span>
+          </a>
+
+          <a
+            href={SUPPORT_WHATSAPP_HREF}
+            target="_blank"
+            rel="noreferrer"
+            className="w-full rounded-2xl border border-green-200 bg-green-50 px-4 py-4 flex items-center justify-between gap-3 hover:border-green-300 transition-all"
+          >
+            <span className="flex items-center gap-3 min-w-0">
+              <MessageCircle size={18} className="text-green-700 shrink-0" />
+              <span className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-green-700">Chat With Us</p>
+                <p className="text-sm font-black text-gray-900 truncate">Open WhatsApp</p>
+              </span>
+            </span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-green-700 shrink-0">Chat</span>
+          </a>
+        </div>
       </div>
     );
     if (view === 'settings') return (

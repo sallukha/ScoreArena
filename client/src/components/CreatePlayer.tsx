@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { auth, handleFirestoreError, OperationType } from '../firebase';
 import { ArrowLeft, User, ChevronRight, Link2, Trophy } from 'lucide-react';
 import { Player } from '../types';
-import { findPlayersByPhone } from '../utils/playerLookup';
+import { findPlayersByContact, normalizeEmail, normalizePhone } from '../utils/playerLookup';
 import { useCreatePlayerMutation } from '../features/players/hooks/usePlayerMutations';
 
 export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
@@ -14,37 +14,40 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
   const [bowlingStyle, setBowlingStyle] = useState('Right Arm Fast');
   const [loading, setLoading] = useState(false);
   const [linkedPlayer, setLinkedPlayer] = useState<Player | null>(null);
-  const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+  const [isCheckingContact, setIsCheckingContact] = useState(false);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const createPlayerMutation = useCreatePlayerMutation();
 
-  const handlePhoneLookup = async (value: string) => {
-    if (value.replace(/\D/g, '').length < 10) {
+  const handleContactLookup = async (value: string) => {
+    const trimmed = value.trim();
+    const canSearch = trimmed.includes('@') ? trimmed.length >= 5 : trimmed.replace(/\D/g, '').length >= 10;
+    if (!canSearch) {
       setLinkedPlayer(null);
       setInfoMessage(null);
       return;
     }
 
-    setIsCheckingPhone(true);
+    setIsCheckingContact(true);
     try {
-      const players = await findPlayersByPhone(value);
+      const players = await findPlayersByContact(trimmed);
       const existingPlayer = players.find((player) => player.scope !== 'tournament') || null;
       setLinkedPlayer(existingPlayer);
 
       if (existingPlayer) {
         setName(existingPlayer.name);
         setEmail(existingPlayer.email || '');
+        setPhoneNumber(existingPlayer.phoneNumber || '');
         setRole(existingPlayer.role);
         setBattingStyle(existingPlayer.battingStyle || 'Right Hand Bat');
         setBowlingStyle(existingPlayer.bowlingStyle || 'Right Arm Fast');
-        setInfoMessage('Existing player profile found. Stats and history will stay linked with this phone number.');
+        setInfoMessage('Existing player profile found. Stats and history will stay linked with this email/phone.');
       } else {
         setInfoMessage(null);
       }
     } catch (error) {
-      console.error('Error finding player by phone:', error);
+      console.error('Error finding player by contact:', error);
     } finally {
-      setIsCheckingPhone(false);
+      setIsCheckingContact(false);
     }
   };
 
@@ -62,8 +65,8 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
 
       await createPlayerMutation.mutateAsync({
         name,
-        email: email || null,
-        phoneNumber: phoneNumber || null,
+        email: normalizeEmail(email) || null,
+        phoneNumber: normalizePhone(phoneNumber) || null,
         role,
         battingStyle,
         bowlingStyle,
@@ -112,13 +115,13 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
               type="tel"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
-              onBlur={(e) => void handlePhoneLookup(e.target.value)}
+              onBlur={(e) => void handleContactLookup(e.target.value)}
               placeholder="Enter phone number"
               className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-medium"
             />
           </div>
-          <p className="text-[10px] text-gray-400 italic">Same phone number se existing player profile, stats aur history auto link ho jayegi.</p>
-          {isCheckingPhone && <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Checking existing profile...</p>}
+          <p className="text-[10px] text-gray-400 italic">Same phone/email se existing player profile, stats aur history auto link ho jayegi.</p>
+          {isCheckingContact && <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Checking existing profile...</p>}
         </div>
 
         {linkedPlayer && (
@@ -163,6 +166,7 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onBlur={(e) => void handleContactLookup(e.target.value)}
               placeholder="Enter player email"
               className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-medium"
             />

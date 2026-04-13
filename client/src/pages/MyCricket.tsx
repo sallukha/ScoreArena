@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight, History } from 'lucide-react';
-import { db, query, collection, where, limit, onSnapshot, getDocs, orderBy, handleFirestoreError, OperationType } from '../firebase';
+import { db, query, collection, where, limit, onSnapshot, orderBy, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { findPrimaryPlayerByIdentity } from '../utils/playerLookup';
 
 export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>; onMatchClick: (id: string) => void }) => {
     const { user } = useAuth();
@@ -53,22 +54,19 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
                 return;
             }
 
-            const fallbackQueries = [];
-            if (user.phoneNumber) {
-                fallbackQueries.push(getDocs(query(collection(db, 'players'), where('phoneNumber', '==', user.phoneNumber), limit(1))));
-            }
-            if (user.email) {
-                fallbackQueries.push(getDocs(query(collection(db, 'players'), where('email', '==', user.email), limit(1))));
-            }
-
-            if (fallbackQueries.length === 0) {
-                connectPlayerHistory(null);
-                return;
-            }
-
-            Promise.all(fallbackQueries).then((results) => {
-                const firstMatch = results.find((result) => !result.empty);
-                connectPlayerHistory(firstMatch ? firstMatch.docs[0] : null);
+            findPrimaryPlayerByIdentity({
+                uid: user.uid,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+            }).then((player) => {
+                if (!player) {
+                    connectPlayerHistory(null);
+                    return;
+                }
+                connectPlayerHistory({
+                    id: player.id,
+                    data: () => player,
+                });
             }).catch((error) => {
                 handleFirestoreError(error, OperationType.GET, 'players');
                 setLoadingHistory(false);

@@ -117,8 +117,10 @@ export interface Match {
   playerStats?: Record<string, PlayerMatchStats>; // Map of Player ID to stats
   fallOfWickets?: {
     player: string;
+    playerName?: string;
     type: string;
     bowler: string;
+    bowlerName?: string;
     fielder?: string;
     fielderName?: string;
     score: number;

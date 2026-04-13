@@ -3,8 +3,8 @@ import mongoose, { Schema, model } from 'mongoose';
 const PlayerSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
-    email: { type: String, default: null },
-    phoneNumber: { type: String, default: null },
+    email: { type: String, default: null, trim: true, lowercase: true },
+    phoneNumber: { type: String, default: null, trim: true },
     role: {
       type: String,
       enum: ['Batsman', 'Bowler', 'All-rounder', 'Wicket-keeper'],

@@ -1,5 +1,11 @@
-﻿import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Share2 } from 'lucide-react';
+import { db, doc, getDoc } from '../../firebase';
+
+const playerNameCache: Record<string, string> = {};
+
+const isLikelyPlayerId = (value: unknown) =>
+    typeof value === 'string' && /^[A-Za-z0-9_-]{16,}$/.test(value);
 
 export const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams: Record<string, any>, onClick: (id: string) => void, isLive?: boolean, key?: any }) => {
     const teamA = teams[match.teamA] || { name: 'Team A' };
@@ -23,10 +29,65 @@ export const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams
     const currentInnings = match.currentInnings === 2 ? 2 : 1;
     const inningWickets = (match.fallOfWickets || []).filter((w: any) => w.innings === currentInnings);
     const recentDismissals = inningWickets.slice(-3);
-    const getWicketFielderName = (wicket: any) => wicket?.fielderName || wicket?.fielder || '';
+    const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        const idsToResolve = Array.from(
+            new Set(
+                recentDismissals.flatMap((wicket: any) => [wicket?.player, wicket?.bowler, wicket?.fielder])
+            )
+        )
+            .filter((id): id is string => isLikelyPlayerId(id))
+            .filter((id) => !playerNameCache[id]);
+
+        if (idsToResolve.length === 0) return;
+
+        let cancelled = false;
+        const resolveNames = async () => {
+            const entries = await Promise.all(
+                idsToResolve.map(async (id) => {
+                    try {
+                        const playerSnap = await getDoc(doc(db, 'players', id));
+                        if (!playerSnap.exists()) return [id, ''] as const;
+                        const data = playerSnap.data() as any;
+                        return [id, typeof data?.name === 'string' ? data.name : ''] as const;
+                    } catch {
+                        return [id, ''] as const;
+                    }
+                })
+            );
+
+            if (cancelled) return;
+
+            const nextNames: Record<string, string> = {};
+            for (const [id, name] of entries) {
+                if (!name) continue;
+                playerNameCache[id] = name;
+                nextNames[id] = name;
+            }
+
+            if (Object.keys(nextNames).length > 0) {
+                setResolvedNames((prev) => ({ ...prev, ...nextNames }));
+            }
+        };
+
+        void resolveNames();
+        return () => {
+            cancelled = true;
+        };
+    }, [recentDismissals]);
+
+    const resolvePlayerName = (value: unknown, fallback = '') => {
+        if (typeof value !== 'string' || !value.trim()) return fallback;
+        return resolvedNames[value] || playerNameCache[value] || (isLikelyPlayerId(value) ? fallback : value);
+    };
+
+    const getWicketFielderName = (wicket: any) =>
+        wicket?.fielderName || resolvePlayerName(wicket?.fielder, '');
+
     const getWicketSummary = (wicket: any) => {
         if (!wicket) return '';
-        const bowler = wicket.bowlerName || wicket.bowler || 'Bowler';
+        const bowler = wicket.bowlerName || resolvePlayerName(wicket.bowler, 'Bowler');
         const fielder = getWicketFielderName(wicket);
         if (wicket.type === 'caught') return fielder ? `Caught by ${fielder}` : 'Caught';
         if (wicket.type === 'stumped') return fielder ? `Stumped by ${fielder}` : 'Stumped';
@@ -192,7 +253,7 @@ export const MatchCard = ({ match, teams, onClick, isLive }: { match: any, teams
                                                     {wicket.score}-{inningWickets.findIndex((item: any) => item === wicket) + 1}
                                                 </p>
                                                 <p className="text-xs font-bold text-gray-800 truncate">
-                                                    {wicket.playerName || wicket.player || 'Batter Out'}
+                                                    {wicket.playerName || resolvePlayerName(wicket.player, 'Batter Out')}
                                                 </p>
                                                 <p className="text-[10px] text-gray-500 font-bold truncate">
                                                     {getWicketSummary(wicket)} • {match.playerStats?.[wicket.player]?.runs || 0} ({match.playerStats?.[wicket.player]?.balls || 0})

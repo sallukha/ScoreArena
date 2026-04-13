@@ -3,7 +3,7 @@ import { db, doc, query, collection, where, onSnapshot, handleFirestoreError, Op
 import { motion, AnimatePresence } from 'motion/react';
 import { Users, UserPlus, ArrowLeft, Search, X, ChevronRight, Trophy, Shield, Link2 } from 'lucide-react';
 import { Team, Player } from '../types';
-import { findPlayersByPhone } from '../utils/playerLookup';
+import { findPlayersByContact, searchPlayersByContact } from '../utils/playerLookup';
 import { useUpdateTeamMutation } from '../features/teams/hooks/useTeamMutations';
 import { useCreatePlayerMutation } from '../features/players/hooks/usePlayerMutations';
 
@@ -23,6 +23,8 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
   const [searchQuery, setSearchQuery] = useState('');
   const [phoneLookupQuery, setPhoneLookupQuery] = useState('');
   const [linkedPhonePlayer, setLinkedPhonePlayer] = useState<Player | null>(null);
+  const [contactSuggestions, setContactSuggestions] = useState<Player[]>([]);
+  const [isLoadingContactSuggestions, setIsLoadingContactSuggestions] = useState(false);
   const [addPlayerMessage, setAddPlayerMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -147,15 +149,46 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
   };
 
   const handlePhoneLookup = async () => {
-    if (phoneLookupQuery.replace(/\D/g, '').length < 10) return;
+    const value = phoneLookupQuery.trim();
+    const canSearch = value.includes('@') ? value.length >= 5 : value.replace(/\D/g, '').length >= 10;
+    if (!canSearch) return;
+
     try {
-      const players = await findPlayersByPhone(phoneLookupQuery);
+      const players = await findPlayersByContact(value);
       setLinkedPhonePlayer(players[0] || null);
     } catch (error) {
       console.error('Error finding player by phone:', error);
       setLinkedPhonePlayer(null);
     }
   };
+
+  useEffect(() => {
+    const value = phoneLookupQuery.trim();
+    const isContactQuery = value.includes('@') || value.replace(/\D/g, '').length >= 3;
+
+    if (!isContactQuery) {
+      setContactSuggestions([]);
+      setLinkedPhonePlayer(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsLoadingContactSuggestions(true);
+      try {
+        const results = await searchPlayersByContact(value, 8);
+        const filtered = results.filter((player) => !team?.players?.includes(player.id));
+        setContactSuggestions(filtered);
+        setLinkedPhonePlayer(filtered[0] || null);
+      } catch (error) {
+        console.error('Error searching contact suggestions:', error);
+        setContactSuggestions([]);
+      } finally {
+        setIsLoadingContactSuggestions(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [phoneLookupQuery, team?.players]);
 
   const filteredPlayers = allPlayers.filter((p: any) => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -373,8 +406,8 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
 
                   <div className="flex gap-3 mb-6">
                     <input
-                      type="tel"
-                      placeholder="Find by phone number..."
+                      type="text"
+                      placeholder="Find by phone or email..."
                       value={phoneLookupQuery}
                       onChange={(e) => setPhoneLookupQuery(e.target.value)}
                       className="flex-1 bg-yellow-50 border border-yellow-100 rounded-2xl py-4 px-4 font-bold text-sm focus:ring-2 focus:ring-yellow-500"
@@ -382,11 +415,36 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                     <button
                       onClick={handlePhoneLookup}
                       type="button"
-                      className="bg-yellow-500 text-black px-5 rounded-2xl font-black text-[10px] uppercase tracking-widest"
+                      className="bg-yellow-500 text-black px-5 rounded-2xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      disabled={isLoadingContactSuggestions || !phoneLookupQuery.trim()}
                     >
-                      Find
+                      {isLoadingContactSuggestions ? '...' : 'Find'}
                     </button>
                   </div>
+
+                  {contactSuggestions.length > 0 && (
+                    <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-2 flex flex-col gap-2">
+                      <p className="px-2 pt-1 text-[10px] font-black uppercase tracking-widest text-gray-400">Suggestions</p>
+                      {contactSuggestions.map((player) => (
+                        <button
+                          key={`team-contact-${player.id}`}
+                          type="button"
+                          onClick={() => addPlayerToTeam(player.id)}
+                          className="w-full rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-left hover:bg-yellow-50 hover:border-yellow-200 transition-all"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-black text-gray-900 truncate">{player.name}</p>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 truncate">
+                                {player.email || player.phoneNumber || 'No contact'} | {player.stats?.matches || 0} M
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-yellow-700">Add</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {linkedPhonePlayer && !team?.players?.includes(linkedPhonePlayer.id) && (
                     <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 flex items-center justify-between gap-3">

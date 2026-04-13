@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, collection, auth, getDocs, query, where, handleFirestoreError, OperationType } from '../firebase';
 import { ArrowLeft, Users, ChevronRight, Search, CheckCircle2, Link2, Trophy } from 'lucide-react';
 import { Player } from '../types';
-import { findPlayersByPhone } from '../utils/playerLookup';
+import { findPlayersByContact, searchPlayersByContact } from '../utils/playerLookup';
 import { useCreateTeamMutation } from '../features/teams/hooks/useTeamMutations';
 
 export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
@@ -14,6 +14,8 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
   const [search, setSearch] = useState('');
   const [isSearchingGlobal, setIsSearchingGlobal] = useState(false);
   const [linkedSearchPlayer, setLinkedSearchPlayer] = useState<Player | null>(null);
+  const [contactSuggestions, setContactSuggestions] = useState<Player[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const createTeamMutation = useCreateTeamMutation();
 
   useEffect(() => {
@@ -31,10 +33,14 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
   }, []);
 
   const handleGlobalSearch = async () => {
-    if (!search || search.length < 10) return;
+    const value = search.trim();
+    const digits = value.replace(/\D/g, '');
+    const canSearch = value.includes('@') ? value.length >= 5 : digits.length >= 10;
+    if (!canSearch) return;
+
     setIsSearchingGlobal(true);
     try {
-      const globalPlayers = await findPlayersByPhone(search);
+      const globalPlayers = await findPlayersByContact(value);
       const nonTournamentPlayers = globalPlayers.filter((player) => player.scope !== 'tournament');
       setLinkedSearchPlayer(nonTournamentPlayers[0] || null);
 
@@ -51,6 +57,31 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
       setIsSearchingGlobal(false);
     }
   };
+
+  useEffect(() => {
+    const value = search.trim();
+    const isContactQuery = value.includes('@') || value.replace(/\D/g, '').length >= 3;
+    if (!isContactQuery) {
+      setContactSuggestions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsLoadingSuggestions(true);
+      try {
+        const results = await searchPlayersByContact(value, 8);
+        const nonTournament = results.filter((player) => player.scope !== 'tournament');
+        setContactSuggestions(nonTournament);
+      } catch (error) {
+        console.error('Error loading contact suggestions:', error);
+        setContactSuggestions([]);
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const togglePlayer = (id: string) => {
     setSelectedPlayers(prev => {
@@ -126,19 +157,54 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name or phone..."
+                placeholder="Search by name, email, or phone..."
                 className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all text-sm font-medium"
               />
             </div>
             <button
               type="button"
               onClick={handleGlobalSearch}
-              disabled={isSearchingGlobal || search.length < 10}
+              disabled={isSearchingGlobal || !(search.includes('@') ? search.trim().length >= 5 : search.replace(/\D/g, '').length >= 10)}
               className="bg-black text-white px-4 rounded-xl text-xs font-bold uppercase tracking-widest disabled:opacity-50"
             >
               {isSearchingGlobal ? '...' : 'Find'}
             </button>
           </div>
+
+          {isLoadingSuggestions && (
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Searching existing users...</p>
+          )}
+
+          {contactSuggestions.length > 0 && (
+            <div className="bg-white border border-gray-100 rounded-2xl p-2 flex flex-col gap-2">
+              <p className="px-2 pt-1 text-[10px] font-black uppercase tracking-widest text-gray-400">Suggestions</p>
+              {contactSuggestions.map((player) => (
+                <button
+                  key={`suggestion-${player.id}`}
+                  type="button"
+                  onClick={() => {
+                    setLinkedSearchPlayer(player);
+                    if (!selectedPlayers.includes(player.id)) {
+                      setSelectedPlayers((prev) => [...prev, player.id]);
+                    }
+                  }}
+                  className="w-full text-left rounded-xl border border-gray-100 px-3 py-3 hover:border-yellow-300 hover:bg-yellow-50 transition-all"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-black text-gray-900 truncate">{player.name}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 truncate">
+                        {player.email || player.phoneNumber || 'No contact'} | {player.stats?.matches || 0} M
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-yellow-700">
+                      {selectedPlayers.includes(player.id) ? 'Added' : 'Add'}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
 
           {linkedSearchPlayer && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 flex items-center justify-between gap-3">

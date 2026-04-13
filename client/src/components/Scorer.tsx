@@ -7,6 +7,8 @@ import { MilestonePoster } from './MilestonePoster';
 import { useCreateMatchBallMutation, useDeleteMatchBallMutation, useUpdateMatchMutation } from '../features/matches/hooks/useMatchMutations';
 import { useCreatePlayerMutation, useUpdatePlayerMutation } from '../features/players/hooks/usePlayerMutations';
 import { useUpdateTeamMutation } from '../features/teams/hooks/useTeamMutations';
+import { useAuth } from '../contexts/AuthContext';
+import { findPlayersByContact, normalizeEmail, normalizePhone, searchPlayersByContact } from '../utils/playerLookup';
 
 const PlayerSelectionModal = ({
   isOpen,
@@ -15,7 +17,10 @@ const PlayerSelectionModal = ({
   onSelect,
   title,
   selectedIds = [],
-  onAddPlayer
+  onAddPlayer,
+  onFindPlayerByContact,
+  onSearchPlayersByContact,
+  onAddExistingPlayer,
 }: {
   isOpen: boolean,
   onClose: () => void,
@@ -23,13 +28,88 @@ const PlayerSelectionModal = ({
   onSelect: (id: string) => void,
   title: string,
   selectedIds?: string[],
-  onAddPlayer?: (name: string) => void
+  onAddPlayer?: (payload: { name: string; contact?: string }) => void,
+  onFindPlayerByContact?: (contact: string) => Promise<Player | null>,
+  onSearchPlayersByContact?: (contact: string) => Promise<Player[]>,
+  onAddExistingPlayer?: (player: Player) => void,
 }) => {
   const [search, setSearch] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
+  const [contactInput, setContactInput] = useState('');
+  const [isFindingContact, setIsFindingContact] = useState(false);
+  const [contactFoundPlayer, setContactFoundPlayer] = useState<Player | null>(null);
+  const [contactSuggestions, setContactSuggestions] = useState<Player[]>([]);
+  const [contactMessage, setContactMessage] = useState('');
 
   const filtered = players.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSearch('');
+      setIsAdding(false);
+      setNewName('');
+      setContactInput('');
+      setIsFindingContact(false);
+      setContactFoundPlayer(null);
+      setContactSuggestions([]);
+      setContactMessage('');
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !isAdding || !onSearchPlayersByContact) return;
+
+    const value = contactInput.trim();
+    const canSearch = value.includes('@') ? value.length >= 3 : value.replace(/\D/g, '').length >= 3;
+    if (!canSearch) {
+      setContactSuggestions([]);
+      setContactFoundPlayer(null);
+      setContactMessage('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsFindingContact(true);
+      try {
+        const suggestions = await onSearchPlayersByContact(value);
+        setContactSuggestions(suggestions);
+        setContactFoundPlayer(suggestions[0] || null);
+        if (suggestions.length === 0) {
+          setContactMessage('Existing profile nahi mila. Naya player create ho jayega.');
+        } else {
+          setContactMessage('');
+        }
+      } finally {
+        setIsFindingContact(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [contactInput, isAdding, isOpen, onSearchPlayersByContact]);
+
+  const handleFindByContact = async () => {
+    if (!onFindPlayerByContact) return;
+    const value = contactInput.trim();
+    const canSearch = value.includes('@') ? value.length >= 5 : value.replace(/\D/g, '').length >= 10;
+    if (!canSearch) {
+      setContactMessage('Valid phone ya email enter karo.');
+      setContactFoundPlayer(null);
+      return;
+    }
+
+    setIsFindingContact(true);
+    setContactMessage('');
+    try {
+      const foundPlayer = await onFindPlayerByContact(value);
+      setContactFoundPlayer(foundPlayer);
+      if (!foundPlayer) {
+        setContactMessage('Existing profile nahi mila. Naya player create ho jayega.');
+      }
+    } finally {
+      setIsFindingContact(false);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -39,7 +119,7 @@ const PlayerSelectionModal = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => { onClose(); setIsAdding(false); }}
+            onClick={onClose}
             className="fixed inset-0 bg-black/60 z-[100] backdrop-blur-sm"
           />
           <motion.div
@@ -73,19 +153,104 @@ const PlayerSelectionModal = ({
                     autoFocus
                     className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-bold text-gray-800"
                   />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={contactInput}
+                      onChange={(e) => setContactInput(e.target.value)}
+                      placeholder="Phone ya email (optional)"
+                      className="flex-1 bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all text-sm font-medium"
+                    />
+                    {onFindPlayerByContact && (
+                      <button
+                        onClick={handleFindByContact}
+                        type="button"
+                        disabled={isFindingContact || !contactInput.trim()}
+                        className="px-4 rounded-xl bg-black text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {isFindingContact ? '...' : 'Find'}
+                      </button>
+                    )}
+                  </div>
+                  {isFindingContact && (
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                      Searching existing users...
+                    </p>
+                  )}
+                  {contactSuggestions.length > 0 && onAddExistingPlayer && (
+                    <div className="rounded-2xl border border-gray-100 bg-white p-2 flex flex-col gap-2">
+                      <p className="px-2 pt-1 text-[10px] font-black uppercase tracking-widest text-gray-400">Suggestions</p>
+                      {contactSuggestions.map((player) => (
+                        <button
+                          key={`scorer-contact-${player.id}`}
+                          type="button"
+                          onClick={() => {
+                            onAddExistingPlayer(player);
+                            setIsAdding(false);
+                          }}
+                          className="w-full rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-left hover:bg-yellow-50 hover:border-yellow-200 transition-all"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-black text-gray-900 truncate">{player.name}</p>
+                              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest truncate">
+                                {player.email || player.phoneNumber || 'No contact'} | {player.stats?.matches || 0} M
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-yellow-700">Use</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {contactFoundPlayer && onAddExistingPlayer && (
+                    <div className="rounded-2xl bg-yellow-50 border border-yellow-200 p-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-yellow-700">Existing Profile Found</p>
+                        <p className="text-sm font-black text-gray-900 truncate mt-1">{contactFoundPlayer.name}</p>
+                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
+                          {contactFoundPlayer.role} | {contactFoundPlayer.stats?.matches || 0} M | {contactFoundPlayer.stats?.runs || 0} R
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onAddExistingPlayer(contactFoundPlayer);
+                          setIsAdding(false);
+                        }}
+                        className="shrink-0 bg-black text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                      >
+                        Use
+                      </button>
+                    </div>
+                  )}
+                  {contactMessage && (
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                      {contactMessage}
+                    </p>
+                  )}
                   <div className="flex gap-3">
                     <button
                       onClick={() => setIsAdding(false)}
+                      type="button"
                       className="flex-1 py-3 rounded-xl font-bold text-gray-500 bg-gray-50 uppercase text-[10px] tracking-widest"
                     >
                       Cancel
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
-                        if (newName.trim()) {
-                          onAddPlayer(newName.trim());
+                        const trimmedName = newName.trim();
+                        if (trimmedName && onAddPlayer) {
+                          onAddPlayer({
+                            name: trimmedName,
+                            contact: contactInput.trim() || undefined,
+                          });
                           setIsAdding(false);
                           setNewName('');
+                          setContactInput('');
+                          setContactFoundPlayer(null);
+                          setContactMessage('');
                         }
                       }}
                       className="flex-1 py-3 rounded-xl font-bold text-black bg-yellow-500 uppercase text-[10px] tracking-widest shadow-lg shadow-yellow-500/20"
@@ -321,6 +486,7 @@ const ExtrasModal = ({
 };
 
 export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => void }) => {
+  const { user } = useAuth();
   const [match, setMatch] = useState<Match | null>(null);
   const [teamA, setTeamA] = useState<Team | null>(null);
   const [teamB, setTeamB] = useState<Team | null>(null);
@@ -553,39 +719,76 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     }
   };
 
-  const handleQuickAddPlayer = async (name: string) => {
-    if (!match || !auth.currentUser) return;
+  const getTargetTeamIdForSelection = () => {
+    if (!match || !selectionType) return null;
+    const battingTeamId = match.currentInnings === 1 ? match.teamA : match.teamB;
+    const bowlingTeamId = match.currentInnings === 1 ? match.teamB : match.teamA;
+    return (selectionType === 'striker' || selectionType === 'nonStriker') ? battingTeamId : bowlingTeamId;
+  };
+
+  const addPlayerToTeamIfMissing = async (teamId: string, playerId: string) => {
+    const teamRef = doc(db, 'teams', teamId);
+    const teamSnap = await getDoc(teamRef);
+    if (!teamSnap.exists()) return;
+
+    const teamData = teamSnap.data() as Team;
+    const existingPlayers = teamData.players || [];
+    if (existingPlayers.includes(playerId)) return;
+
+    await updateTeamMutation.mutateAsync({
+      teamId,
+      payload: { players: Array.from(new Set([...existingPlayers, playerId])) },
+    });
+  };
+
+  const handleFindPlayerByContact = async (contact: string) => {
+    const players = await findPlayersByContact(contact);
+    if (players.length === 0) return null;
+    const nonTournamentPlayer = players.find((player) => player.scope !== 'tournament');
+    return nonTournamentPlayer || players[0];
+  };
+
+  const handleSearchPlayersByContact = async (contact: string) => {
+    const players = await searchPlayersByContact(contact, 8);
+    return players.filter((player) => player.scope !== 'tournament');
+  };
+
+  const handleUseExistingPlayer = async (player: Player) => {
+    if (!selectionType) return;
+    const targetTeamId = getTargetTeamIdForSelection();
+    if (!targetTeamId) return;
+
+    await addPlayerToTeamIfMissing(targetTeamId, player.id);
+    await updateMatchPlayer(selectionType, player.id);
+    setSelectionType(null);
+  };
+
+  const handleQuickAddPlayer = async ({ name, contact }: { name: string; contact?: string }) => {
+    if (!match || !auth.currentUser || !selectionType) return;
 
     try {
-      // 1. Create the player
+      const contactValue = (contact || '').trim();
+      if (contactValue) {
+        const existingPlayer = await handleFindPlayerByContact(contactValue);
+        if (existingPlayer) {
+          await handleUseExistingPlayer(existingPlayer);
+          return;
+        }
+      }
+
       const playerId = await createPlayerMutation.mutateAsync({
         name,
+        email: contactValue.includes('@') ? normalizeEmail(contactValue) : null,
+        phoneNumber: contactValue && !contactValue.includes('@') ? normalizePhone(contactValue) : null,
         role: 'All-rounder',
         stats: { runs: 0, wickets: 0, matches: 0, average: 0, strikeRate: 0, economy: 0 },
         createdBy: auth.currentUser.uid,
       } as any);
 
-      // 2. Add to the correct team squad
-      const battingTeamId = match.currentInnings === 1 ? match.teamA : match.teamB;
-      const bowlingTeamId = match.currentInnings === 1 ? match.teamB : match.teamA;
-      const targetTeamId = (selectionType === 'striker' || selectionType === 'nonStriker') ? battingTeamId : bowlingTeamId;
-
-      const teamRef = doc(db, 'teams', targetTeamId);
-      const teamSnap = await getDoc(teamRef);
-      if (teamSnap.exists()) {
-        const teamData = teamSnap.data() as Team;
-        const updatedPlayers = [...(teamData.players || []), playerId];
-        await updateTeamMutation.mutateAsync({
-          teamId: targetTeamId,
-          payload: { players: updatedPlayers },
-        });
-      }
-
-      // 3. Select the player automatically
-      if (selectionType) {
-        await updateMatchPlayer(selectionType, playerId);
-      }
-
+      const targetTeamId = getTargetTeamIdForSelection();
+      if (!targetTeamId) return;
+      await addPlayerToTeamIfMissing(targetTeamId, playerId);
+      await updateMatchPlayer(selectionType, playerId);
       setSelectionType(null);
     } catch (error) {
       console.error('Error quick adding player:', error);
@@ -897,6 +1100,12 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     const playerStats = { ...(match.playerStats || {}) };
     const strikerId = match.striker;
     const bowlerId = match.bowler;
+    const strikerName = strikerId
+      ? (match.strikerName || battingPlayers.find((player) => player.id === strikerId)?.name || null)
+      : null;
+    const bowlerName = bowlerId
+      ? (match.bowlerName || bowlingPlayers.find((player) => player.id === bowlerId)?.name || null)
+      : null;
     const fielderName = fielderId
       ? (bowlingPlayers.find((player) => player.id === fielderId)?.name || null)
       : null;
@@ -945,8 +1154,10 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     if (strikerId) {
       fallOfWickets.push({
         player: strikerId,
+        playerName: strikerName || undefined,
         type,
         bowler: bowlerId || 'Unknown',
+        bowlerName: bowlerName || undefined,
         fielder: fielderId || null,
         fielderName: fielderName || undefined,
         score: currentScore.runs,
@@ -1233,6 +1444,29 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     );
   }
 
+  const canUpdateMatch = Boolean(user && (user.uid === match.createdBy || user.role === 'admin'));
+  if (!canUpdateMatch) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 w-full max-w-md text-center">
+          <p className="text-xs font-black uppercase tracking-widest text-red-500">Scoring Locked</p>
+          <h2 className="text-2xl font-black italic uppercase tracking-tight text-gray-900 mt-3">
+            {teamA.name} vs {teamB.name}
+          </h2>
+          <p className="text-sm font-bold text-gray-500 mt-3">
+            Is live match ka scorer access sirf creator ya admin ke liye enabled hai.
+          </p>
+          <button
+            onClick={onBack}
+            className="mt-6 w-full bg-black text-white py-3 rounded-2xl font-black uppercase tracking-widest"
+          >
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const battingTeam = match.currentInnings === 1 ? teamA : teamB;
   const bowlingTeam = match.currentInnings === 1 ? teamB : teamA;
   const currentScore = match.currentInnings === 1 ? match.scoreA : match.scoreB;
@@ -1258,6 +1492,9 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         onSelect={(id) => selectionType && updateMatchPlayer(selectionType, id)}
         selectedIds={selectionType === 'striker' ? [match.nonStriker || ''] : selectionType === 'nonStriker' ? [match.striker || ''] : []}
         onAddPlayer={handleQuickAddPlayer}
+        onFindPlayerByContact={handleFindPlayerByContact}
+        onSearchPlayersByContact={handleSearchPlayersByContact}
+        onAddExistingPlayer={handleUseExistingPlayer}
       />
       <WicketModal
         isOpen={isWicketModalOpen}

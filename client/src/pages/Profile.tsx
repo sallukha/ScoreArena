@@ -4,6 +4,7 @@ import { db, doc, getDocs, setDoc, query, collection, where, onSnapshot, limit }
 import { optimizeProfileImage } from '../lib/imageUtils';
 import { useAuth } from '../contexts/AuthContext';
 import { StatBox } from '../components/ui/StatBox';
+import { findPrimaryPlayerByIdentity, normalizePhone } from '../utils/playerLookup';
 
 export const Profile = () => {
     const { user, logout } = useAuth();
@@ -21,12 +22,15 @@ export const Profile = () => {
         const unsubByUid = onSnapshot(qByUid, (snap) => {
             if (!snap.empty) {
                 setPlayerStats(snap.docs[0].data());
-            } else if (user.phoneNumber) {
-                const qByPhone = query(collection(db, 'players'), where('phoneNumber', '==', user.phoneNumber), limit(1));
-                getDocs(qByPhone).then(phoneSnap => {
-                    if (!phoneSnap.empty) {
-                        setPlayerStats(phoneSnap.docs[0].data());
-                    }
+            } else {
+                findPrimaryPlayerByIdentity({
+                    uid: user.uid,
+                    email: user.email,
+                    phoneNumber: user.phoneNumber,
+                }).then((player) => {
+                    setPlayerStats(player || null);
+                }).catch((error) => {
+                    console.error('Error resolving linked profile player:', error);
                 });
             }
         });
@@ -42,12 +46,13 @@ export const Profile = () => {
         if (!user || !phoneInput || phoneInput.length < 10) return;
         setIsLinking(true);
         try {
+            const normalizedPhone = normalizePhone(phoneInput);
             await setDoc(doc(db, 'users', user.uid), {
                 ...user,
-                phoneNumber: phoneInput
+                phoneNumber: normalizedPhone
             });
 
-            const q = query(collection(db, 'players'), where('phoneNumber', '==', phoneInput), limit(1));
+            const q = query(collection(db, 'players'), where('phoneNumber', '==', normalizedPhone), limit(1));
             const snap = await getDocs(q);
             if (!snap.empty) {
                 setPlayerStats(snap.docs[0].data());

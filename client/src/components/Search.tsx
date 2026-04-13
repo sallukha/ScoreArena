@@ -50,7 +50,8 @@ export const Search = ({ onBack, onPlayerClick, onTeamClick, onTournamentClick }
         .map(doc => ({ id: doc.id, ...doc.data() } as Player))
         .filter(p => 
           p.name.toLowerCase().includes(term) || 
-          (p.phoneNumber && p.phoneNumber.includes(term))
+          (p.phoneNumber && p.phoneNumber.includes(term)) ||
+          (p.email && p.email.toLowerCase().includes(term))
         );
       
       const teams = teamsSnap.docs
