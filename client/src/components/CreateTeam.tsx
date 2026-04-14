@@ -229,7 +229,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
             </div>
           )}
 
-          <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="flex flex-col gap-2 max-h-75 overflow-y-auto pr-2 custom-scrollbar">
             {filteredPlayers.map(player => (
               <button
                 key={player.id}

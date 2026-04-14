@@ -65,7 +65,7 @@ export const MilestonePoster = ({ isOpen, onClose, player, milestone }: Mileston
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="fixed inset-0 z-200 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -83,7 +83,7 @@ export const MilestonePoster = ({ isOpen, onClose, player, milestone }: Mileston
           <div 
             ref={posterRef}
             style={{ backgroundColor: '#eab308', borderColor: '#ffffff' }}
-            className="aspect-[4/5] rounded-[2.5rem] p-8 flex flex-col items-center justify-between text-black relative overflow-hidden shadow-2xl border-8"
+            className="aspect-4/5 rounded-[2.5rem] p-8 flex flex-col items-center justify-between text-black relative overflow-hidden shadow-2xl border-8"
           >
             {/* Background Elements */}
             <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
@@ -109,7 +109,7 @@ export const MilestonePoster = ({ isOpen, onClose, player, milestone }: Mileston
             <div className="text-center z-10 w-full">
               <div 
                 style={{ backgroundColor: '#000000', borderColor: '#ffffff' }}
-                className="w-24 h-24 rounded-[2rem] mx-auto mb-4 flex items-center justify-center border-4 shadow-xl"
+                className="w-24 h-24 rounded-4xl mx-auto mb-4 flex items-center justify-center border-4 shadow-xl"
               >
                 {milestone.type === 'runs' ? <Star size={48} style={{ color: '#eab308' }} /> : <Target size={48} style={{ color: '#eab308' }} />}
               </div>
