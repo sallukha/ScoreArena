@@ -1,93 +1,94 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight, History } from 'lucide-react';
-import { db, query, collection, where, limit, onSnapshot, orderBy, handleFirestoreError, OperationType } from '../firebase';
+import { db, query, collection, onSnapshot, orderBy, limit, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { findPrimaryPlayerByIdentity } from '../utils/playerLookup';
+import { subscribePrimaryPlayerByIdentity } from '../features/players/services/playerService';
+
+const getCreatedAtTime = (value: any) => {
+    if (!value) return 0;
+    if (typeof value?.toMillis === 'function') return value.toMillis();
+    if (typeof value?.seconds === 'number') return value.seconds * 1000;
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const formatScore = (score: any) => `${score?.runs || 0}/${score?.wickets || 0}`;
+const formatOvers = (score: any) => `${score?.overs || 0}.${score?.balls || 0}`;
 
 export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>; onMatchClick: (id: string) => void }) => {
     const { user } = useAuth();
     const [linkedPlayer, setLinkedPlayer] = useState<any>(null);
-    const [playerMatches, setPlayerMatches] = useState<any[]>([]);
-    const [loadingHistory, setLoadingHistory] = useState(true);
+    const [allMatches, setAllMatches] = useState<any[]>([]);
+    const [loadingPlayer, setLoadingPlayer] = useState(true);
+    const [loadingMatches, setLoadingMatches] = useState(true);
 
     useEffect(() => {
         if (!user) {
             setLinkedPlayer(null);
-            setPlayerMatches([]);
-            setLoadingHistory(false);
+            setLoadingPlayer(false);
             return;
         }
 
-        let unsubscribeMatches: (() => void) | undefined;
-        const qByUid = query(collection(db, 'players'), where('createdBy', '==', user.uid), limit(1));
+        setLoadingPlayer(true);
 
-        const unsubPlayer = onSnapshot(qByUid, (snap) => {
-            const connectPlayerHistory = (playerDoc: any) => {
-                if (!playerDoc) {
-                    setLinkedPlayer(null);
-                    setPlayerMatches([]);
-                    setLoadingHistory(false);
-                    return;
-                }
-
-                const playerData = { id: playerDoc.id, ...playerDoc.data() };
-                setLinkedPlayer(playerData);
-                setLoadingHistory(true);
-
-                if (unsubscribeMatches) {
-                    unsubscribeMatches();
-                }
-
-                const qMatches = query(collection(db, 'matches'), orderBy('createdAt', 'desc'), limit(200));
-                unsubscribeMatches = onSnapshot(qMatches, (matchSnap) => {
-                    const allMatches = matchSnap.docs.map((matchDoc) => ({ id: matchDoc.id, ...matchDoc.data() }));
-                    setPlayerMatches(allMatches.filter((match: any) => Boolean(match.playerStats?.[playerData.id])));
-                    setLoadingHistory(false);
-                }, (error) => {
-                    handleFirestoreError(error, OperationType.GET, 'matches');
-                    setLoadingHistory(false);
-                });
-            };
-
-            if (!snap.empty) {
-                connectPlayerHistory(snap.docs[0]);
-                return;
-            }
-
-            findPrimaryPlayerByIdentity({
-                uid: user.uid,
-                email: user.email,
-                phoneNumber: user.phoneNumber,
-            }).then((player) => {
-                if (!player) {
-                    connectPlayerHistory(null);
-                    return;
-                }
-                connectPlayerHistory({
-                    id: player.id,
-                    data: () => player,
-                });
-            }).catch((error) => {
-                handleFirestoreError(error, OperationType.GET, 'players');
-                setLoadingHistory(false);
-            });
+        const unsubscribePlayer = subscribePrimaryPlayerByIdentity({
+            uid: user.uid,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+        }, (player) => {
+            setLinkedPlayer(player);
+            setLoadingPlayer(false);
         }, (error) => {
             handleFirestoreError(error, OperationType.GET, 'players');
-            setLoadingHistory(false);
+            setLoadingPlayer(false);
         });
 
-        return () => {
-            unsubPlayer();
-            if (unsubscribeMatches) {
-                unsubscribeMatches();
-            }
-        };
+        return unsubscribePlayer;
     }, [user]);
 
+    useEffect(() => {
+        if (!user) {
+            setAllMatches([]);
+            setLoadingMatches(false);
+            return;
+        }
+
+        setLoadingMatches(true);
+
+        const qMatches = query(collection(db, 'matches'), orderBy('createdAt', 'desc'), limit(250));
+        const unsubscribeMatches = onSnapshot(qMatches, (matchSnap) => {
+            setAllMatches(matchSnap.docs.map((matchDoc: { id: any; data: () => any; }) => ({ id: matchDoc.id, ...matchDoc.data() })));
+            setLoadingMatches(false);
+        }, (error) => {
+            handleFirestoreError(error, OperationType.GET, 'matches');
+            setLoadingMatches(false);
+        });
+
+        return unsubscribeMatches;
+    }, [user]);
+
+    const loadingHistory = loadingPlayer || loadingMatches;
+    const playerMatches = allMatches
+        .filter((match: any) => {
+            if (match.status !== 'live' && match.status !== 'completed') return false;
+            const createdByUser = match.createdBy === user?.uid;
+            const playedByLinkedPlayer = linkedPlayer ? Boolean(match.playerStats?.[linkedPlayer.id]) : false;
+            return createdByUser || playedByLinkedPlayer;
+        })
+        .sort((a: any, b: any) => getCreatedAtTime(b.createdAt) - getCreatedAtTime(a.createdAt));
+
+    const aggregatedStats = playerMatches.reduce((acc, match: any) => {
+        const playerMatch = linkedPlayer ? match.playerStats?.[linkedPlayer.id] : null;
+        acc.matches += 1;
+        acc.runs += playerMatch?.runs || 0;
+        acc.wickets += playerMatch?.wickets || 0;
+        return acc;
+    }, { matches: 0, runs: 0, wickets: 0 });
+
     const summary = {
-        matches: linkedPlayer?.stats?.matches || playerMatches.length,
-        runs: linkedPlayer?.stats?.runs || 0,
-        wickets: linkedPlayer?.stats?.wickets || 0,
+        matches: linkedPlayer?.stats?.matches || aggregatedStats.matches,
+        runs: linkedPlayer?.stats?.runs || aggregatedStats.runs,
+        wickets: linkedPlayer?.stats?.wickets || aggregatedStats.wickets,
     };
 
     return (
@@ -95,7 +96,7 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
             <div className="bg-black text-white rounded-[2.5rem] p-6 sm:p-8 shadow-2xl text-center relative overflow-hidden">
                 <div className="absolute inset-x-0 top-0 h-28 bg-yellow-500" />
                 <div className="relative z-10 flex flex-col items-center">
-                    <div className="h-24 w-24 rounded-[2rem] overflow-hidden border-4 border-white shadow-2xl mt-2">
+                    <div className="h-24 w-24 rounded-4xl overflow-hidden border-4 border-white shadow-2xl mt-2">
                         <img
                             src={user?.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${linkedPlayer?.id || user?.uid || 'my-cricket'}`}
                             alt={user?.displayName || linkedPlayer?.name || 'My Cricket'}
@@ -108,7 +109,7 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
                         {linkedPlayer?.name || user?.displayName || 'Player Profile'}
                     </h2>
                     <p className="mt-2 text-xs font-bold uppercase tracking-widest text-white/60">
-                        {linkedPlayer?.role || 'Linked cricket profile'}
+                        {linkedPlayer?.role || 'Logged-in cricket account'}
                     </p>
                     <div className="mt-6 grid grid-cols-3 gap-3 w-full">
                         <div className="rounded-2xl bg-white/10 px-3 py-4">
@@ -131,7 +132,7 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
                 <div>
                     <h3 className="text-lg font-black italic uppercase tracking-tighter text-gray-900">Full Match History</h3>
                     <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gray-400 mt-1">
-                        Logged-in player ne jitne matches khele sab yahan dikhenge
+                        Logged-in user ke created aur linked player matches yahan dikhenge
                     </p>
                 </div>
             </div>
@@ -140,27 +141,30 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
                 <div className="flex items-center justify-center py-16">
                     <div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
                 </div>
-            ) : !linkedPlayer ? (
-                <div className="bg-white p-8 rounded-[2rem] border border-dashed border-gray-200 text-center">
-                    <p className="text-sm font-black uppercase tracking-widest text-gray-500">Player profile link nahi mila</p>
-                    <p className="text-xs font-bold text-gray-400 mt-3">Phone ya email linked player milte hi yahin automatic history show ho jayegi.</p>
-                </div>
             ) : playerMatches.length === 0 ? (
-                <div className="bg-white p-10 rounded-[2rem] border border-dashed border-gray-200 text-center">
+                <div className="bg-white p-8 rounded-4xl border border-dashed border-gray-200 text-center">
                     <History size={38} className="mx-auto text-gray-200 mb-3" />
                     <p className="text-sm font-black uppercase tracking-widest text-gray-500">Abhi koi match history nahi mili</p>
+                    <p className="text-xs font-bold text-gray-400 mt-3">Jaise hi aap is account se match create karoge ya linked player match khelega, history yahin aa jayegi.</p>
                 </div>
             ) : (
                 <div className="flex flex-col gap-4">
+                    {!linkedPlayer && (
+                        <div className="bg-yellow-50 border border-yellow-100 rounded-[1.75rem] px-4 py-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-yellow-700">Player link pending</p>
+                            <p className="text-sm font-bold text-gray-700 mt-2">Abhi account ke created matches dikh rahe hain. Phone ya email se linked player milte hi playing stats bhi aa jayenge.</p>
+                        </div>
+                    )}
                     {playerMatches.map((match: any) => {
-                        const playerMatch = match.playerStats?.[linkedPlayer.id];
+                        const playerMatch = linkedPlayer ? match.playerStats?.[linkedPlayer.id] : null;
                         const teamAName = teams[match.teamA]?.name || 'Team A';
                         const teamBName = teams[match.teamB]?.name || 'Team B';
+                        const showPlayerStats = Boolean(playerMatch);
                         return (
                             <button
                                 key={match.id}
                                 onClick={() => onMatchClick(match.id)}
-                                className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm text-left hover:border-yellow-200 transition-colors"
+                                className="bg-white p-5 rounded-4xl border border-gray-100 shadow-sm text-left hover:border-yellow-200 transition-colors"
                             >
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
@@ -171,29 +175,52 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
                                             {teamAName} vs {teamBName}
                                         </h4>
                                         <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                                            {linkedPlayer.name} performance
+                                            {showPlayerStats ? `${linkedPlayer.name} performance` : 'Created by your account'}
                                         </p>
                                     </div>
                                     <ChevronRight size={18} className="text-gray-300 shrink-0 mt-1" />
                                 </div>
 
                                 <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                    <div className="rounded-2xl bg-yellow-50 border border-yellow-100 px-3 py-3">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-yellow-700">Runs</p>
-                                        <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.runs || 0}</p>
-                                    </div>
-                                    <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Balls</p>
-                                        <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.balls || 0}</p>
-                                    </div>
-                                    <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Wickets</p>
-                                        <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.wickets || 0}</p>
-                                    </div>
-                                    <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Runs Given</p>
-                                        <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.runsConceded || 0}</p>
-                                    </div>
+                                    {showPlayerStats ? (
+                                        <>
+                                            <div className="rounded-2xl bg-yellow-50 border border-yellow-100 px-3 py-3">
+                                                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-yellow-700">Runs</p>
+                                                <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.runs || 0}</p>
+                                            </div>
+                                            <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                                                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Balls</p>
+                                                <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.balls || 0}</p>
+                                            </div>
+                                            <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                                                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Wickets</p>
+                                                <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.wickets || 0}</p>
+                                            </div>
+                                            <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                                                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Runs Given</p>
+                                                <p className="mt-1 text-xl font-black italic text-gray-900">{playerMatch?.runsConceded || 0}</p>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="rounded-2xl bg-yellow-50 border border-yellow-100 px-3 py-3">
+                                                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-yellow-700">Team A</p>
+                                                <p className="mt-1 text-xl font-black italic text-gray-900">{formatScore(match.scoreA)}</p>
+                                            </div>
+                                            <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                                                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Team B</p>
+                                                <p className="mt-1 text-xl font-black italic text-gray-900">{formatScore(match.scoreB)}</p>
+                                            </div>
+                                            <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                                                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Overs</p>
+                                                <p className="mt-1 text-xl font-black italic text-gray-900">{formatOvers(match.currentInnings === 2 ? match.scoreB : match.scoreA)}</p>
+                                            </div>
+                                            <div className="rounded-2xl bg-gray-50 border border-gray-100 px-3 py-3">
+                                                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500">Innings</p>
+                                                <p className="mt-1 text-xl font-black italic text-gray-900">{match.currentInnings || 1}</p>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </button>
                         );
