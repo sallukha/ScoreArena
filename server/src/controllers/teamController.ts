@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import TeamModel from '../models/Team.js';
-import PlayerModel from '../models/Player.js';
+import PlayerModel  from '../models/Player.js';
 import { resolveOrCreatePlayer, sanitizePlayer } from '../utils/playerAuth.js';
 
 export async function createTeam(req: Request, res: Response) {
