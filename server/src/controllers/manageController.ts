@@ -9,7 +9,7 @@ export async function deleteMatch(req: Request, res: Response) {
   if (!matchId) {
     return res.status(400).json({ error: 'Match ID is required' });
   }
-  const match = await MatchModel.findById(matchId).exec();
+  const match = await MatchModel.findById(matchId) as any;
   if (!match) {
     return res.status(404).json({ error: 'Match not found' });
   }

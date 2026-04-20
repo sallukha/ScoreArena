@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { PlayerModel } from '../models/Player.js';
+import PlayerModel from '../models/Player.js';
 
 const OTP_TTL_MS = Math.max(Number(process.env.OTP_TTL_SECONDS || 600), 60) * 1000;
 const otpStore = new Map<string, { code: string; expiresAt: number; metadata?: Record<string, any> }>();
