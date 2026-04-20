@@ -92,7 +92,7 @@ export async function createMatch(req: Request, res: Response) {
 
 export async function finalizeMatch(req: Request, res: Response) {
   const matchId = String(req.params.matchId || '');
-  const match = await MatchModel.findById(matchId);
+  const match = await MatchModel.findById(matchId).exec();
 
   if (!match) {
     return res.status(404).json({ error: 'Match not found' });

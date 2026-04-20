@@ -25,7 +25,7 @@ export async function searchPlayers(req: Request, res: Response) {
       { email: safeRegex },
       ...(phoneRegex ? [{ phone: phoneRegex }] : []),
     ],
-  })
+  } as any)
     .sort({ matchesPlayed: -1, totalRuns: -1, createdAt: -1 })
     .limit(10)
     .lean();
@@ -45,7 +45,7 @@ export async function getPlayerHistory(req: Request, res: Response) {
 
   const matches = await MatchModel.find({
     $or: [{ players: player._id }, { 'performances.playerId': player._id }],
-  })
+  } as any)
     .sort({ matchDate: -1, createdAt: -1 })
     .limit(10)
     .lean();

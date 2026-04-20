@@ -24,7 +24,7 @@ export async function createTeam(req: Request, res: Response) {
 
 export async function addPlayerToTeam(req: Request, res: Response) {
   const teamId = String(req.params.teamId || '');
-  const team = await TeamModel.findById(teamId);
+  const team = await TeamModel.findById(teamId).exec();
 
   if (!team) {
     return res.status(404).json({ error: 'Team not found' });

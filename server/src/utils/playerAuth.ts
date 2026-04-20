@@ -107,7 +107,7 @@ export async function findPlayerByIdentifiers(input: { phone?: string | null; em
   if (normalizedEmail) filters.push({ email: normalizedEmail });
   if (filters.length === 0) return null;
 
-  const players = await PlayerModel.find({ $or: filters }).limit(2);
+  const players = await PlayerModel.find({ $or: filters } as any).limit(2);
   if (players.length === 0) return null;
 
   const byPhone = normalizedPhone ? players.find((player) => player.phone === normalizedPhone) : null;
