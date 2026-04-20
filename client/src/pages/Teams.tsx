@@ -16,14 +16,14 @@ export const Teams = ({ onCreateTeam, onCreatePlayer, onTeamClick, liveMatches }
         const unsubTeams = onSnapshot(qTeams, (snap) => {
             setTeams(
                 snap.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .map((doc: { id: any; data: () => any; }) => ({ id: doc.id, ...doc.data() }))
                     .filter((team: any) => team.scope !== 'tournament')
             );
         });
         const unsubPlayers = onSnapshot(qPlayers, (snap) => {
             setPlayers(
                 snap.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .map((doc: { id: any; data: () => any; }) => ({ id: doc.id, ...doc.data() }))
                     .filter((player: any) => player.scope !== 'tournament')
             );
         });

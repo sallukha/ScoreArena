@@ -22,7 +22,7 @@ export const Home = ({ onStartMatch, onMatchClick, onPlayerClick, matches, recen
     useEffect(() => {
         const qLeaders = query(collection(db, 'players'), orderBy('stats.runs', 'desc'), limit(3));
         const unsubLeaders = onSnapshot(qLeaders, (snap) => {
-            setTopLeaders(snap.docs.map((leaderDoc) => ({ id: leaderDoc.id, ...leaderDoc.data() })));
+            setTopLeaders(snap.docs.map((leaderDoc: { id: any; data: () => any; }) => ({ id: leaderDoc.id, ...leaderDoc.data() })));
         }, (error) => {
             handleFirestoreError(error, OperationType.GET, 'players');
         });
@@ -79,7 +79,7 @@ export const Home = ({ onStartMatch, onMatchClick, onPlayerClick, matches, recen
 
                     <div className="flex overflow-x-auto gap-4 pb-4 -mx-4 px-4 scrollbar-hide snap-x snap-mandatory">
                         {otherLiveMatches.map(match => (
-                            <div key={match.id} className="min-w-[88vw] sm:min-w-[340px] max-w-[420px] snap-start">
+                            <div key={match.id} className="min-w-[88vw] sm:min-w-85 max-w-105 snap-start">
                                 <MatchCard match={match} teams={teams} onClick={() => onMatchClick(match.id)} isLive />
                             </div>
                         ))}
@@ -99,12 +99,12 @@ export const Home = ({ onStartMatch, onMatchClick, onPlayerClick, matches, recen
                             <button
                                 key={leader.id}
                                 onClick={() => onPlayerClick(leader.id)}
-                                className={`rounded-[2rem] border shadow-sm text-center transition-all hover:-translate-y-1 ${index === 0
+                                className={`rounded-4xl border shadow-sm text-center transition-all hover:-translate-y-1 ${index === 0
                                     ? 'bg-black text-white border-black px-6 py-7 sm:-mt-3'
                                     : 'bg-white text-gray-900 border-gray-100 px-6 py-6'
                                     }`}
                             >
-                                <div className={`mx-auto h-20 w-20 rounded-[2rem] overflow-hidden border-4 ${index === 0 ? 'border-yellow-500' : 'border-yellow-100'}`}>
+                                <div className={`mx-auto h-20 w-20 rounded-4xl overflow-hidden border-4 ${index === 0 ? 'border-yellow-500' : 'border-yellow-100'}`}>
                                     <img
                                         src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${leader.id}`}
                                         alt={leader.name}
@@ -119,7 +119,7 @@ export const Home = ({ onStartMatch, onMatchClick, onPlayerClick, matches, recen
                                 <p className={`mt-1 text-[10px] font-bold uppercase tracking-widest ${index === 0 ? 'text-white/60' : 'text-gray-400'}`}>
                                     {leader.role || 'Cricket Player'}
                                 </p>
-                                <div className={`mt-5 rounded-[1.5rem] px-4 py-3 ${index === 0 ? 'bg-yellow-500 text-black' : 'bg-yellow-50 text-gray-900 border border-yellow-100'}`}>
+                                <div className={`mt-5 rounded-3xl px-4 py-3 ${index === 0 ? 'bg-yellow-500 text-black' : 'bg-yellow-50 text-gray-900 border border-yellow-100'}`}>
                                     <p className="text-[9px] font-black uppercase tracking-[0.22em]">Runs</p>
                                     <p className="mt-1 text-2xl font-black italic leading-none">{leader.stats?.runs || 0}</p>
                                 </div>
@@ -164,7 +164,7 @@ export const Home = ({ onStartMatch, onMatchClick, onPlayerClick, matches, recen
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {tournaments.slice(0, 4).map((tournament) => (
-                            <div key={tournament.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col gap-4">
+                            <div key={tournament.id} className="bg-white p-6 rounded-4xl border border-gray-100 shadow-sm flex flex-col gap-4">
                                 <div className="w-full aspect-video bg-yellow-50 rounded-2xl flex items-center justify-center">
                                     <Trophy size={40} className="text-yellow-500" />
                                 </div>
@@ -186,7 +186,7 @@ export const Home = ({ onStartMatch, onMatchClick, onPlayerClick, matches, recen
                 whileHover={{ scale: 1.05, rotate: 5 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={onStartMatch}
-                className="fixed bottom-24 right-6 w-20 h-20 bg-yellow-500 rounded-[2rem] shadow-2xl flex flex-col items-center justify-center text-black z-40 border-4 border-white rotate-12"
+                className="fixed bottom-24 right-6 w-20 h-20 bg-yellow-500 rounded-4xl shadow-2xl flex flex-col items-center justify-center text-black z-40 border-4 border-white rotate-12"
             >
                 <div className="absolute -top-2 -right-2 bg-black text-white text-[10px] font-black px-2 py-1 rounded-full border-2 border-white">
                     FREE

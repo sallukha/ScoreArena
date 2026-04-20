@@ -1,0 +1,89 @@
+import type { Request, Response } from 'express';
+import { MatchModel } from '../models/Match.js';
+import { PlayerModel } from '../models/Player.js';
+import { TeamModel } from '../models/Team.js';
+
+// Delete a match by ID
+export async function deleteMatch(req: Request, res: Response) {
+  const matchId = req.params.id;
+  if (!matchId) {
+    return res.status(400).json({ error: 'Match ID is required' });
+  }
+  const match = await MatchModel.findById(matchId);
+  if (!match) {
+    return res.status(404).json({ error: 'Match not found' });
+  }
+
+  if (match.statsFinalized && Array.isArray(match.performances) && match.performances.length > 0) {
+    const totalsByPlayer = new Map<string, { matchesPlayed: number; totalRuns: number; totalWickets: number }>();
+
+    for (const performance of match.performances) {
+      const playerId = String(performance.playerId);
+      const current = totalsByPlayer.get(playerId) || {
+        matchesPlayed: 0,
+        totalRuns: 0,
+        totalWickets: 0,
+      };
+
+      current.matchesPlayed = 1;
+      current.totalRuns += Number(performance.runs || 0);
+      current.totalWickets += Number(performance.wickets || 0);
+      totalsByPlayer.set(playerId, current);
+    }
+
+    for (const [playerId, totals] of totalsByPlayer.entries()) {
+      await PlayerModel.updateOne(
+        { _id: playerId },
+        {
+          $inc: {
+            matchesPlayed: -totals.matchesPlayed,
+            totalRuns: -totals.totalRuns,
+            totalWickets: -totals.totalWickets,
+          },
+        }
+      );
+    }
+  }
+
+  await MatchModel.deleteOne({ _id: matchId });
+  return res.json({ success: true, message: 'Match deleted successfully.' });
+}
+
+// Delete a player by ID
+export async function deletePlayer(req: Request, res: Response) {
+  const playerId = req.params.id;
+  if (!playerId) {
+    return res.status(400).json({ error: 'Player ID is required' });
+  }
+  const player = await PlayerModel.findById(playerId);
+  if (!player) {
+    return res.status(404).json({ error: 'Player not found' });
+  }
+
+  await TeamModel.updateMany(
+    { players: player._id },
+    {
+      $pull: { players: player._id },
+    }
+  );
+
+  await TeamModel.updateMany(
+    { captainId: player._id },
+    {
+      $set: { captainId: null },
+    }
+  );
+
+  await MatchModel.updateMany(
+    { players: player._id },
+    {
+      $pull: {
+        players: player._id,
+        performances: { playerId: player._id },
+      },
+    }
+  );
+
+  await PlayerModel.deleteOne({ _id: playerId });
+  return res.json({ success: true, message: 'Player deleted successfully.' });
+}

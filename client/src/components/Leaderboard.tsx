@@ -18,7 +18,7 @@ export const Leaderboard = ({ onPlayerClick }: { onPlayerClick: (id: string) => 
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      setPlayers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Player)));
+      setPlayers(snap.docs.map((d: { id: any; data: () => Player; }) => ({ id: d.id, ...d.data() } as Player)));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'players');

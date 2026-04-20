@@ -226,8 +226,8 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
   return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 gap-12">
         <div className="text-center flex flex-col gap-4">
-          <div className="w-40 rounded-full overflow-hidden border-4 border-black bg-[#0f2f24] mx-auto shadow-2xl aspect-square ring-4 ring-yellow-200/70">
-            <img src="/scorewala-login-logo.jpg" alt="Logo" className="w-full h-full object-cover scale-110" />
+          <div className="w-36 h-36 flex items-center justify-center rounded-full overflow-hidden border-4 border-black bg-white mx-auto shadow-2xl ring-4 ring-yellow-200/70 p-2">
+              <img src="/scorewala-login-logo.jpg" alt="Logo" className="w-full h-full object-cover scale-110" />
           </div>
           <h1 className="text-4xl font-black italic uppercase tracking-tighter text-gray-900 mt-4">ScoreArena</h1>
           <p className="text-gray-500 font-medium max-w-xs mx-auto">The #1 Cricket Scoring App.</p>
@@ -252,7 +252,7 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
                       className="w-full bg-yellow-500 text-black py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
                   >
                     {loading ? <div className="w-6 h-6 border-3 border-black border-t-transparent rounded-full animate-spin" /> :
-                        <><img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="G" /> Continue with Google</>}
+                      <><img src="https://www.google.com/favicon.ico" className="w-6 h-6 rounded-full bg-white border border-gray-300 mr-2" alt="G" /> Continue with Google</>}
                   </button>
                 </motion.div>
             ) : (

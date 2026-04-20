@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, doc, query, collection, where, onSnapshot, handleFirestoreError, OperationType, limit, auth } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, UserPlus, ArrowLeft, Search, X, ChevronRight, Trophy, Shield, Link2 } from 'lucide-react';
+import { Users, UserPlus, ArrowLeft, Search, X, ChevronRight, Trophy, Shield, Link2, Trash2 } from 'lucide-react';
 import { Team, Player } from '../types';
 import { findPlayersByContact, searchPlayersByContact } from '../utils/playerLookup';
 import { useUpdateTeamMutation } from '../features/teams/hooks/useTeamMutations';
@@ -103,6 +103,12 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
   const removePlayerFromTeam = async (playerId: string) => {
     if (!team) return;
     const currentPlayers = team.players || [];
+    const player = teamPlayers.find((item) => item.id === playerId);
+    const confirmed = window.confirm(
+      `${player?.name || 'This player'} ko team se remove karna hai?\n\nYe action sirf is team se player ko hataega.`
+    );
+    if (!confirmed) return;
+
     try {
       await updateTeamMutation.mutateAsync({
         teamId,
@@ -313,9 +319,11 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
                 </div>
                 <button
                   onClick={() => removePlayerFromTeam(player.id)}
-                  className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                  className="flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-red-600 hover:bg-red-100 transition-colors"
+                  title="Remove player from team"
                 >
-                  <X size={18} />
+                  <Trash2 size={14} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Remove</span>
                 </button>
               </motion.div>
             ))

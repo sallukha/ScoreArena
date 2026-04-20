@@ -2,44 +2,50 @@ import mongoose, { Schema, model } from 'mongoose';
 
 const PlayerSchema = new Schema(
   {
-    name: { type: String, required: true, trim: true },
-    email: { type: String, default: null, trim: true, lowercase: true },
-    phoneNumber: { type: String, default: null, trim: true },
-    role: {
+    name: { type: String, trim: true, default: '' },
+    phone: {
       type: String,
-      enum: ['Batsman', 'Bowler', 'All-rounder', 'Wicket-keeper'],
-      default: 'Batsman',
+      unique: true,
+      sparse: true,
+      trim: true,
+      default: null,
     },
-    battingStyle: { type: String, default: '' },
-    bowlingStyle: { type: String, default: '' },
-    createdBy: { type: String, required: true },
-    stats: {
-      type: {
-        matches: { type: Number, default: 0 },
-        runs: { type: Number, default: 0 },
-        wickets: { type: Number, default: 0 },
-        highestScore: { type: Number, default: 0 },
-        bestBowling: { type: String, default: '' },
-        average: { type: Number, default: 0 },
-        strikeRate: { type: Number, default: 0 },
-        economy: { type: Number, default: 0 },
-        fours: { type: Number, default: 0 },
-        sixes: { type: Number, default: 0 },
-        fifties: { type: Number, default: 0 },
-        centuries: { type: Number, default: 0 },
-        balls: { type: Number, default: 0 },
-        ballsBowled: { type: Number, default: 0 },
-        runsConceded: { type: Number, default: 0 },
-      },
-      default: () => ({}),
+    email: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      lowercase: true,
+      default: null,
+      match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Invalid email address'],
     },
+    password: { type: String, default: null },
+    matchesPlayed: { type: Number, default: 0 },
+    totalRuns: { type: Number, default: 0 },
+    totalWickets: { type: Number, default: 0 },
+    teams: [{ type: Schema.Types.ObjectId, ref: 'Team' }],
+    createdAt: { type: Date, default: Date.now },
   },
   { timestamps: true, versionKey: false }
 );
 
-PlayerSchema.index({ createdBy: 1, createdAt: -1 });
-PlayerSchema.index({ phoneNumber: 1 });
-PlayerSchema.index({ email: 1 });
-PlayerSchema.index({ createdBy: 1, name: 1 });
+// Custom validation: at least one of phone or email must exist
+PlayerSchema.pre('validate', function (next) {
+  if (!this.phone && !this.email) {
+    this.invalidate('phone', 'Either phone or email is required.');
+    this.invalidate('email', 'Either phone or email is required.');
+  }
+
+  if (this.phone && !/^\+?\d{10,15}$/.test(String(this.phone))) {
+    this.invalidate('phone', 'Invalid phone number');
+  }
+
+  next();
+});
+
+PlayerSchema.index({ phone: 1 }, { unique: true, sparse: true });
+PlayerSchema.index({ email: 1 }, { unique: true, sparse: true });
+PlayerSchema.index({ name: 1, createdAt: -1 });
+PlayerSchema.index({ createdAt: -1 });
 
 export const PlayerModel = mongoose.models.Player || model('Player', PlayerSchema);

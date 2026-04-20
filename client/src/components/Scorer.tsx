@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { db, doc, collection, onSnapshot, auth, getDoc, handleFirestoreError, OperationType, getDocs, query, where, orderBy, increment, limit } from '../firebase';
-import { ArrowLeft, ChevronRight, User, Settings2, History, CheckCircle2, Search, RotateCcw, XCircle, AlertCircle, Trophy, Star, Target } from 'lucide-react';
+import { ArrowLeft, ChevronRight, User, Settings2, History, CheckCircle2, Search, RotateCcw, XCircle, AlertCircle, Trophy, Star, Target, Share2 } from 'lucide-react';
 import { Match, Team, Player } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { MilestonePoster } from './MilestonePoster';
@@ -517,6 +517,30 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   const createPlayerMutation = useCreatePlayerMutation();
   const updatePlayerMutation = useUpdatePlayerMutation();
   const updateTeamMutation = useUpdateTeamMutation();
+
+  const handleShareLiveScore = async () => {
+    if (!teamA || !teamB) return;
+
+    const inningsScore = match.currentInnings === 1 ? match.scoreA : match.scoreB;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?matchId=${encodeURIComponent(matchId)}`;
+    const shareText = `Live on ScoreArena: ${teamA.name} vs ${teamB.name}\n\nCurrent score: ${inningsScore.runs}/${inningsScore.wickets} in ${inningsScore.overs}.${inningsScore.balls} overs`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `${teamA.name} vs ${teamB.name} - Live Score`,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
+      window.alert('Live scoring link copied. Ab ise share kar sakte ho.');
+    } catch (error) {
+      console.error('Error sharing live score:', error);
+    }
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -1603,6 +1627,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           onClose={() => setMilestoneData(null)}
           player={milestoneData.player}
           milestone={milestoneData.milestone}
+          shareUrl={`${window.location.origin}${window.location.pathname}?matchId=${encodeURIComponent(matchId)}`}
         />
       )}
       <div className="bg-yellow-500 p-4 flex items-center justify-between shadow-lg">
@@ -1616,6 +1641,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleShareLiveScore}
+            className="p-2 hover:bg-yellow-600 rounded-full transition-colors"
+            title="Share Live Score"
+          >
+            <Share2 size={20} />
+          </button>
           <button
             onClick={handleRefresh}
             className={`p-2 hover:bg-yellow-600 rounded-full transition-colors ${isRefreshing ? 'animate-spin' : ''}`}

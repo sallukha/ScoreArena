@@ -27,6 +27,17 @@ const FallOfWicketSchema = new Schema(
   { _id: false }
 );
 
+const PerformanceSchema = new Schema(
+  {
+    playerId: { type: Schema.Types.ObjectId, ref: 'Player', required: true },
+    runs: { type: Number, default: 0, min: 0 },
+    wickets: { type: Number, default: 0, min: 0 },
+    ballsPlayed: { type: Number, default: 0, min: 0 },
+    oversBowled: { type: Number, default: 0, min: 0 },
+  },
+  { _id: false }
+);
+
 const MatchSchema = new Schema(
   {
     teamA: { type: String, required: true },
@@ -47,8 +58,10 @@ const MatchSchema = new Schema(
     bowlerName: { type: String, default: '' },
     playerStats: { type: Schema.Types.Mixed, default: {} },
     fallOfWickets: { type: [FallOfWicketSchema], default: [] },
+    players: [{ type: Schema.Types.ObjectId, ref: 'Player', default: [] }],
     createdBy: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now },
+    performances: { type: [PerformanceSchema], default: [] },
+    matchDate: { type: Date, default: Date.now },
     statsFinalized: { type: Boolean, default: false },
   },
   { timestamps: true, versionKey: false }
@@ -58,5 +71,7 @@ MatchSchema.index({ status: 1, createdAt: -1 });
 MatchSchema.index({ createdBy: 1, status: 1, createdAt: -1 });
 MatchSchema.index({ teamA: 1, teamB: 1 });
 MatchSchema.index({ tournamentId: 1, status: 1, createdAt: -1 });
+MatchSchema.index({ players: 1, matchDate: -1 });
+MatchSchema.index({ 'performances.playerId': 1, matchDate: -1 });
 
 export const MatchModel = mongoose.models.Match || model('Match', MatchSchema);

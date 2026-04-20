@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LogOut } from 'lucide-react';
+import { LogOut, Pencil, Check, X } from 'lucide-react';
 import { db, doc, getDocs, setDoc, query, collection, where, onSnapshot, limit } from '../firebase';
 import { optimizeProfileImage } from '../lib/imageUtils';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,6 +14,10 @@ export const Profile = () => {
     const [imagePreview, setImagePreview] = useState('');
     const [isSavingImage, setIsSavingImage] = useState(false);
     const [imageMessage, setImageMessage] = useState('');
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [displayNameInput, setDisplayNameInput] = useState('');
+    const [isSavingName, setIsSavingName] = useState(false);
+    const [nameMessage, setNameMessage] = useState('');
 
     useEffect(() => {
         if (!user) return;
@@ -21,7 +25,7 @@ export const Profile = () => {
         const qByUid = query(collection(db, 'players'), where('createdBy', '==', user.uid), limit(1));
         const unsubByUid = onSnapshot(qByUid, (snap) => {
             if (!snap.empty) {
-                setPlayerStats(snap.docs[0].data());
+                setPlayerStats({ id: snap.docs[0].id, ...snap.docs[0].data() });
             } else {
                 findPrimaryPlayerByIdentity({
                     uid: user.uid,
@@ -41,6 +45,10 @@ export const Profile = () => {
     useEffect(() => {
         setImagePreview(user?.photoURL || '');
     }, [user?.photoURL]);
+
+    useEffect(() => {
+        setDisplayNameInput(user?.displayName || '');
+    }, [user?.displayName]);
 
     const handleLinkPhone = async () => {
         if (!user || !phoneInput || phoneInput.length < 10) return;
@@ -111,6 +119,34 @@ export const Profile = () => {
         }
     };
 
+    const handleSaveDisplayName = async () => {
+        const trimmedName = displayNameInput.trim();
+        if (!user || !trimmedName) return;
+
+        setIsSavingName(true);
+        setNameMessage('');
+        try {
+            const nextUser = { ...user, displayName: trimmedName };
+            await setDoc(doc(db, 'users', user.uid), nextUser);
+
+            if (playerStats?.id) {
+                await setDoc(doc(db, 'players', playerStats.id), {
+                    ...playerStats,
+                    name: trimmedName,
+                });
+                setPlayerStats((prev: any) => prev ? { ...prev, name: trimmedName } : prev);
+            }
+
+            setIsEditingName(false);
+            setNameMessage('Profile name updated.');
+        } catch (error) {
+            console.error('Error saving display name:', error);
+            setNameMessage('Name update nahi ho paaya.');
+        } finally {
+            setIsSavingName(false);
+        }
+    };
+
     const stats = {
         matches: playerStats?.stats?.matches || 0,
         runs: playerStats?.stats?.runs || 0,
@@ -140,7 +176,47 @@ export const Profile = () => {
                     />
                 </div>
                 <div className="text-center">
-                    <h2 className="text-2xl font-black text-black italic uppercase tracking-tighter">{user?.displayName || 'Cricket Hero'}</h2>
+                    {isEditingName ? (
+                        <div className="flex flex-col items-center gap-3">
+                            <input
+                                type="text"
+                                value={displayNameInput}
+                                onChange={(e) => setDisplayNameInput(e.target.value)}
+                                className="bg-white/80 border border-black/10 rounded-2xl px-4 py-3 text-center text-lg font-black text-black focus:outline-none focus:ring-2 focus:ring-black/20"
+                                placeholder="Enter your name"
+                            />
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleSaveDisplayName}
+                                    disabled={isSavingName || !displayNameInput.trim()}
+                                    className="bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    <Check size={14} /> {isSavingName ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setDisplayNameInput(user?.displayName || '');
+                                        setIsEditingName(false);
+                                    }}
+                                    disabled={isSavingName}
+                                    className="bg-white/80 text-black px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-black/10 flex items-center gap-2"
+                                >
+                                    <X size={14} /> Cancel
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center gap-2">
+                            <h2 className="text-2xl font-black text-black italic uppercase tracking-tighter">{user?.displayName || 'Cricket Hero'}</h2>
+                            <button
+                                onClick={() => setIsEditingName(true)}
+                                className="rounded-full bg-black/10 p-2 text-black hover:bg-black/20 transition-colors"
+                                title="Edit profile name"
+                            >
+                                <Pencil size={14} />
+                            </button>
+                        </div>
+                    )}
                     <p className="text-black/60 font-bold text-xs uppercase tracking-widest mt-1">{user?.email || user?.phoneNumber || 'Player Profile'}</p>
                     <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                         <label className="bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest">
@@ -165,6 +241,7 @@ export const Profile = () => {
                     </div>
                     <p className="text-[9px] text-black/50 font-bold uppercase tracking-widest">JPG, PNG ya WebP image upload kar sakte ho.</p>
                     {imageMessage && <p className="text-[10px] text-black/70 font-bold uppercase tracking-widest mt-2">{imageMessage}</p>}
+                    {nameMessage && <p className="text-[10px] text-black/70 font-bold uppercase tracking-widest mt-2">{nameMessage}</p>}
                     {!user?.phoneNumber && (
                         <div className="mt-4 flex flex-col gap-2">
                             <div className="flex gap-2">

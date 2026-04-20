@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Share2 } from 'lucide-react';
+import { ArrowLeft, Share2, Trash2 } from 'lucide-react';
 import { db, doc, getDoc, query, collection, onSnapshot, orderBy } from '../firebase';
+import { useAuth } from '../contexts/AuthContext';
+import { useDeleteMatchMutation } from '../features/matches/hooks/useMatchMutations';
 
 export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () => void }) => {
     const [match, setMatch] = useState<any>(null);
@@ -10,6 +12,8 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
     const [balls, setBalls] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState<'info' | 'scorecard' | 'commentary'>('info');
     const [playerNames, setPlayerNames] = useState<Record<string, string>>({});
+    const { user } = useAuth();
+    const deleteMatchMutation = useDeleteMatchMutation();
 
     useEffect(() => {
         const unsubMatch = onSnapshot(doc(db, 'matches', matchId), async (snap) => {
@@ -37,7 +41,7 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
 
         const q = query(collection(db, 'matches', matchId, 'balls'), orderBy('timestamp', 'desc'));
         const unsubBalls = onSnapshot(q, (snap) => {
-            setBalls(snap.docs.map(d => ({ id: d.id, ...d.data() })).slice(0, 12));
+            setBalls(snap.docs.map((d: { id: any; data: () => any; }) => ({ id: d.id, ...d.data() })).slice(0, 12));
         });
 
         return () => { unsubMatch(); unsubBalls(); };
@@ -95,7 +99,7 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                             ) : (
                                 bowlingRows.map(({ id, stats, totalBalls }) => (
                                     <tr key={id} className="border-b border-gray-50/50">
-                                        <td className="py-3 truncate max-w-[100px]">{playerNames[id] || `Player ${id.slice(0, 4)}`}</td>
+                                        <td className="py-3 truncate max-w-25">{playerNames[id] || `Player ${id.slice(0, 4)}`}</td>
                                         <td className="py-3 text-center">{stats.overs}.{stats.ballsBowled}</td>
                                         <td className="py-3 text-center">{stats.runsConceded}</td>
                                         <td className="py-3 text-center text-red-600">{stats.wickets}</td>
@@ -112,16 +116,44 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
 
     const handleShareMatch = async (e?: React.MouseEvent) => {
         if (e) e.stopPropagation();
+        const shareUrl = `${window.location.origin}${window.location.pathname}?matchId=${encodeURIComponent(matchId)}`;
+        const shareText = `Watch ${teamA.name} vs ${teamB.name} on ScoreArena.\n\nScore: ${teamA.name} ${match.scoreA.runs}/${match.scoreA.wickets} vs ${teamB.name} ${match.scoreB.runs}/${match.scoreB.wickets}`;
         if (navigator.share) {
             try {
                 await navigator.share({
                     title: `${teamA.name} vs ${teamB.name} - ScoreArena`,
-                    text: `Check out the live score: ${teamA.name} ${match.scoreA.runs}/${match.scoreA.wickets} vs ${teamB.name} ${match.scoreB.runs}/${match.scoreB.wickets}`,
-                    url: window.location.href,
+                    text: shareText,
+                    url: shareUrl,
                 });
             } catch (err) {
                 console.error('Error sharing:', err);
             }
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(shareUrl);
+            window.alert('Match link copied. Ab ise share kar sakte ho.');
+        } catch (error) {
+            console.error('Error copying share link:', error);
+            window.alert(shareUrl);
+        }
+    };
+
+    const canDeleteMatch = !!user && (user.role === 'admin' || user.uid === match.createdBy);
+
+    const handleDeleteMatch = async () => {
+        const confirmation = window.confirm(
+            `Delete this ${match.status === 'live' ? 'live' : 'match'}?\n\nCanceled match ko delete karne ke baad woh live list se hat jayega.`
+        );
+        if (!confirmation) return;
+
+        try {
+            await deleteMatchMutation.mutateAsync(matchId);
+            onBack();
+        } catch (error) {
+            console.error('Failed to delete match:', error);
+            window.alert('Match delete nahi ho paya. Please try again.');
         }
     };
 
@@ -145,7 +177,20 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                 </button>
             </div>
 
-            <div className="flex gap-4 px-4 border-b border-gray-100 bg-white sticky top-[88px] z-40">
+            {canDeleteMatch && (
+                <div className="px-4 pt-4">
+                    <button
+                        onClick={handleDeleteMatch}
+                        disabled={deleteMatchMutation.isPending}
+                        className="w-full rounded-[1.75rem] border border-red-200 bg-red-50 px-4 py-4 flex items-center justify-center gap-3 text-red-700 font-black uppercase tracking-widest text-xs disabled:opacity-60"
+                    >
+                        <Trash2 size={16} />
+                        {deleteMatchMutation.isPending ? 'Deleting Match...' : 'Delete Match'}
+                    </button>
+                </div>
+            )}
+
+            <div className="flex gap-4 px-4 border-b border-gray-100 bg-white sticky top-22 z-40">
                 {(['info', 'scorecard', 'commentary'] as const).map((tab) => (
                     <button
                         key={tab}
@@ -218,7 +263,7 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                                     <tbody className="font-bold text-gray-800">
                                         {match.striker && (
                                             <tr className="border-b border-gray-50">
-                                                <td className="py-3 truncate max-w-[100px]">{match.strikerName || 'Striker'}*</td>
+                                                <td className="py-3 truncate max-w-25">{match.strikerName || 'Striker'}*</td>
                                                 <td className="py-3 text-center">{match.playerStats?.[match.striker]?.runs || 0}</td>
                                                 <td className="py-3 text-center">{match.playerStats?.[match.striker]?.balls || 0}</td>
                                                 <td className="py-3 text-center">{match.playerStats?.[match.striker]?.fours || 0}</td>
@@ -232,7 +277,7 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                                         )}
                                         {match.nonStriker && (
                                             <tr className="border-b border-gray-50 opacity-60">
-                                                <td className="py-3 truncate max-w-[100px]">{match.nonStrikerName || 'Non-Striker'}</td>
+                                                <td className="py-3 truncate max-w-25">{match.nonStrikerName || 'Non-Striker'}</td>
                                                 <td className="py-3 text-center">{match.playerStats?.[match.nonStriker]?.runs || 0}</td>
                                                 <td className="py-3 text-center">{match.playerStats?.[match.nonStriker]?.balls || 0}</td>
                                                 <td className="py-3 text-center">{match.playerStats?.[match.nonStriker]?.fours || 0}</td>
@@ -328,7 +373,7 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                                                 <tr key={id} className="border-b border-gray-50/50">
                                                     <td className="py-3">
                                                         <div className="flex flex-col">
-                                                            <span className="truncate max-w-[100px] font-black text-gray-900">{playerNames[id] || `Player ${id.slice(0, 4)}`}{isCurrentlyBatting ? '*' : ''}</span>
+                                                            <span className="truncate max-w-25 font-black text-gray-900">{playerNames[id] || `Player ${id.slice(0, 4)}`}{isCurrentlyBatting ? '*' : ''}</span>
                                                             <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">
                                                                 {isOut
                                                                     ? `${getDismissalSummary(isOut)} • ${s.runs} (${s.balls})`
@@ -391,7 +436,7 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                                                 <tr key={id} className="border-b border-gray-50/50">
                                                     <td className="py-3">
                                                         <div className="flex flex-col">
-                                                            <span className="truncate max-w-[100px] font-black text-gray-900">{playerNames[id] || `Player ${id.slice(0, 4)}`}{isCurrentlyBatting ? '*' : ''}</span>
+                                                            <span className="truncate max-w-25 font-black text-gray-900">{playerNames[id] || `Player ${id.slice(0, 4)}`}{isCurrentlyBatting ? '*' : ''}</span>
                                                             <span className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">
                                                                 {isOut
                                                                     ? `${getDismissalSummary(isOut)} • ${s.runs} (${s.balls})`

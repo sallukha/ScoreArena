@@ -12,6 +12,7 @@ import {
   updateDoc,
   deleteDoc,
 } from "../../../firebase";
+import { apiFetch } from "../../../api/http";
 
 type SnapshotData = { id: string; [key: string]: any };
 
@@ -140,7 +141,9 @@ export async function updateMatch(
 }
 
 export async function deleteMatch(matchId: string) {
-  await deleteDoc(doc(db, "matches", matchId));
+  await apiFetch(`/manage/match/${encodeURIComponent(matchId)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function createMatchBall(

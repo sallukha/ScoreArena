@@ -8,9 +8,9 @@ import {
   serverTimestamp,
   doc,
   updateDoc,
-  deleteDoc,
   limit,
 } from "../../../firebase";
+import { apiFetch } from "../../../api/http";
 import { buildPhoneCandidates, normalizeEmail, normalizePhone } from "../../../utils/playerLookup";
 
 type UserIdentity = {
@@ -141,5 +141,7 @@ export async function updatePlayer(
 }
 
 export async function deletePlayer(playerId: string) {
-  await deleteDoc(doc(db, "players", playerId));
+  await apiFetch(`/manage/player/${encodeURIComponent(playerId)}`, {
+    method: "DELETE",
+  });
 }

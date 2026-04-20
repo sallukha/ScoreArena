@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LogOut, Share2, Settings, History, Info, HelpCircle, Users, Trophy, ArrowLeft, Mail, MessageCircle } from 'lucide-react';
+import { LogOut, Share2, Settings, History, Info, HelpCircle, Users, Trophy, ArrowLeft, Mail, MessageCircle, ShieldCheck, Smartphone, MoonStar, BellRing, ChevronRight } from 'lucide-react';
 import { CreatePlayer } from './components/CreatePlayer';
 import { CreateTeam } from './components/CreateTeam';
 import { StartMatch } from './components/StartMatch';
@@ -45,6 +45,36 @@ const SUPPORT_WHATSAPP_HREF = 'https://chat.whatsapp.com/Jre91XaWzECCc4yo38zJfu?
 
 function getWelcomeSessionKey(uid: string) {
   return `${WELCOME_SESSION_KEY_PREFIX}:${uid}`;
+}
+
+function getSharedMatchId() {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('matchId');
+}
+
+function setSharedMatchId(matchId: string | null) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (matchId) {
+    url.searchParams.set('matchId', matchId);
+  } else {
+    url.searchParams.delete('matchId');
+  }
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+async function shareLink(options: { title: string; text: string; url: string; fallbackMessage?: string }) {
+  if (navigator.share) {
+    await navigator.share({
+      title: options.title,
+      text: options.text,
+      url: options.url,
+    });
+    return;
+  }
+
+  await navigator.clipboard.writeText(options.url);
+  window.alert(options.fallbackMessage || 'Link copied successfully.');
 }
 // --- Main App ---
 
@@ -86,6 +116,16 @@ const MainContent = () => {
     document.documentElement.classList.toggle('theme-dark', theme === 'dark');
   }, [theme]);
 
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const sharedMatchId = getSharedMatchId();
+    if (!sharedMatchId) return;
+
+    setActiveMatchId(sharedMatchId);
+    setView('matchDetails');
+  }, [user?.uid]);
+
   const { matches, recentMatches, userTeamIds, teams: userTeams } = useUserCricketData(user);
   const { globalMatches, teams: liveTeams } = useLiveMatches();
   const { tournaments } = useTournaments(6, user?.uid);
@@ -111,6 +151,20 @@ const MainContent = () => {
   }
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  const appShareUrl = window.location.origin;
+
+  const handleShareApp = async () => {
+    try {
+      await shareLink({
+        title: 'ScoreArena',
+        text: 'ScoreArena par live scoring, teams, tournaments aur match sharing sab ek jagah milta hai.',
+        url: appShareUrl,
+        fallbackMessage: 'App link copied. Ab ise WhatsApp ya kisi bhi app me share kar sakte ho.',
+      });
+    } catch (error) {
+      console.error('App share failed:', error);
+    }
+  };
 
   const renderPage = () => {
     const canOpenScorer = (match: { status?: string; createdBy?: string } | undefined) => {
@@ -123,9 +177,11 @@ const MainContent = () => {
       const match = allMatches.find((item) => item.id === id);
       setActiveMatchId(id);
       if (canOpenScorer(match)) {
+        setSharedMatchId(null);
         setView('scorer');
         return;
       }
+      setSharedMatchId(id);
       setView('matchDetails');
     };
 
@@ -140,7 +196,10 @@ const MainContent = () => {
     if (view === 'playerDetails' && activeMatchId) return (
       <PlayerDetails
         playerId={activeMatchId}
-        onBack={() => setView('main')}
+        onBack={() => {
+          setSharedMatchId(null);
+          setView('main');
+        }}
         onMatchClick={(id) => { setActiveMatchId(id); setView('matchDetails'); }}
       />
     );
@@ -180,12 +239,21 @@ const MainContent = () => {
         }}
       />
     );
-    if (view === 'scorer' && activeMatchId) return <Scorer matchId={activeMatchId} onBack={() => setView('main')} />;
-    if (view === 'matchDetails' && activeMatchId) return <MatchDetailsPage matchId={activeMatchId} onBack={() => setView('main')} />;
+    if (view === 'scorer' && activeMatchId) return <Scorer matchId={activeMatchId} onBack={() => {
+      setSharedMatchId(null);
+      setView('main');
+    }} />;
+    if (view === 'matchDetails' && activeMatchId) return <MatchDetailsPage matchId={activeMatchId} onBack={() => {
+      setSharedMatchId(null);
+      setView('main');
+    }} />;
     if (view === 'teamDetails' && activeMatchId) return (
       <TeamDetails
         teamId={activeMatchId}
-        onBack={() => setView('main')}
+        onBack={() => {
+          setSharedMatchId(null);
+          setView('main');
+        }}
         onPlayerClick={(id) => { setActiveMatchId(id); setView('playerDetails'); }}
       />
     );
@@ -226,7 +294,7 @@ const MainContent = () => {
           <ArrowLeft size={16} /> Back
         </button>
         <h2 className="text-2xl font-black italic uppercase text-gray-900 mb-4">Help & Support</h2>
-        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5 flex flex-col gap-4">
+        <div className="bg-white rounded-4xl border border-gray-100 shadow-sm p-5 flex flex-col gap-4">
           <p className="text-sm font-bold text-gray-600 leading-relaxed">
             Support ke liye humein email karo ya WhatsApp pe chat karo.
           </p>
@@ -269,19 +337,81 @@ const MainContent = () => {
           <ArrowLeft size={16} /> Back
         </button>
         <h2 className="text-2xl font-black italic uppercase text-gray-900 mb-4">Settings</h2>
-        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-black text-gray-900 uppercase tracking-tight">Dark Mode</p>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">Switch app appearance</p>
+        <div className="flex flex-col gap-4">
+          <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-yellow-50 border border-yellow-100 flex items-center justify-center">
+                <MoonStar size={20} className="text-yellow-700" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-gray-900 uppercase tracking-tight">Dark Mode</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">Switch app appearance</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+              className={`relative w-16 h-9 rounded-full transition-colors ${theme === 'dark' ? 'bg-yellow-500' : 'bg-gray-200'}`}
+            >
+              <span
+                className={`absolute top-1 h-7 w-7 rounded-full bg-white shadow-md transition-all ${theme === 'dark' ? 'left-8' : 'left-1'}`}
+              />
+            </button>
           </div>
+
           <button
-            onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
-            className={`relative w-16 h-9 rounded-full transition-colors ${theme === 'dark' ? 'bg-yellow-500' : 'bg-gray-200'}`}
+            onClick={() => void handleShareApp()}
+            className="bg-white rounded-4xl border border-gray-100 shadow-sm p-5 flex items-center justify-between gap-4 text-left"
           >
-            <span
-              className={`absolute top-1 h-7 w-7 rounded-full bg-white shadow-md transition-all ${theme === 'dark' ? 'left-8' : 'left-1'}`}
-            />
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+                <Share2 size={20} className="text-blue-700" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-gray-900 uppercase tracking-tight">Share App</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">Send ScoreArena to your friends and teams</p>
+              </div>
+            </div>
+            <ChevronRight size={18} className="text-gray-300" />
           </button>
+
+          <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-green-50 border border-green-100 flex items-center justify-center">
+                <BellRing size={20} className="text-green-700" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-gray-900 uppercase tracking-tight">Notifications</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">Match alerts and tournament updates</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-green-700">Active</span>
+          </div>
+
+          <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center">
+                <ShieldCheck size={20} className="text-purple-700" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-gray-900 uppercase tracking-tight">Privacy & Security</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">Secure login, protected scoring and account safety</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-purple-700">Protected</span>
+          </div>
+
+          <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center">
+                <Smartphone size={20} className="text-gray-700" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-gray-900 uppercase tracking-tight">App Version</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">Professional mobile build ready for live scoring</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-700">v1.0</span>
+          </div>
         </div>
       </div>
     );
@@ -378,13 +508,7 @@ const MainContent = () => {
                 <MenuLinkUI icon={HelpCircle} label="Help & Support" onClick={() => { setView('help'); setIsMenuOpen(false); }} />
                 <MenuLinkUI icon={Settings} label="Settings" onClick={() => { setView('settings'); setIsMenuOpen(false); }} />
                 <MenuLinkUI icon={Share2} label="Share App" onClick={() => {
-                  if (navigator.share) {
-                    navigator.share({
-                      title: 'ScoreArena',
-                      text: 'Check out this amazing cricket scoring app!',
-                      url: window.location.href
-                    });
-                  }
+                  void handleShareApp();
                   setIsMenuOpen(false);
                 }} />
               </div>

@@ -2,8 +2,21 @@ import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { getFirebaseAdminAuth } from '../config/firebaseAdmin.js';
 import { logger } from '../config/logger.js';
+import { PlayerModel } from '../models/Player.js';
 import { UserModel } from '../models/User.js';
 import { createAccessToken } from '../utils/jwt.js';
+import {
+  createOtp,
+  createPlayerTokenPayload,
+  findPlayerByIdentifiers,
+  hashPassword,
+  normalizeEmail,
+  normalizePhone,
+  resolveOrCreatePlayer,
+  sanitizePlayer,
+  verifyOtp,
+  verifyPassword,
+} from '../utils/playerAuth.js';
 
 function normalizePhoneNumber(input: string) {
   const trimmed = String(input || '').trim();
@@ -203,4 +216,201 @@ export async function firebaseLogin(req: Request, res: Response) {
       error: 'Failed to create or update user. Please try again.',
     });
   }
+}
+
+function buildPlayerAuthResponse(player: any) {
+  return {
+    player: sanitizePlayer(player),
+    token: createAccessToken(createPlayerTokenPayload(player)),
+  };
+}
+
+export async function emailSignup(req: Request, res: Response) {
+  const name = String(req.body?.name || '').trim();
+  const email = normalizeEmail(req.body?.email);
+  const phone = normalizePhone(req.body?.phone);
+  const password = String(req.body?.password || '');
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+  }
+
+  try {
+    const { player, existed } = await resolveOrCreatePlayer({
+      name,
+      email,
+      phone,
+      passwordHash: hashPassword(password),
+    });
+
+    return res.status(existed ? 200 : 201).json({
+      existed,
+      ...buildPlayerAuthResponse(player),
+    });
+  } catch (error) {
+    const statusCode = (error as any)?.statusCode || 500;
+    return res.status(statusCode).json({
+      error: error instanceof Error ? error.message : 'Failed to sign up',
+    });
+  }
+}
+
+export async function emailLogin(req: Request, res: Response) {
+  const email = normalizeEmail(req.body?.email);
+  const password = String(req.body?.password || '');
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  const player = await PlayerModel.findOne({ email });
+  if (!player || !player.password) {
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+
+  const valid = verifyPassword(password, player.password);
+  if (!valid) {
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+
+  return res.json(buildPlayerAuthResponse(player));
+}
+
+export async function requestPhoneOtp(req: Request, res: Response) {
+  const phone = normalizePhone(req.body?.phone);
+  const email = normalizeEmail(req.body?.email);
+  const name = String(req.body?.name || '').trim();
+
+  if (!phone) {
+    return res.status(400).json({ error: 'Phone number is required' });
+  }
+
+  const otp = createOtp(phone, { email, name });
+  return res.json({
+    success: true,
+    phone,
+    ...(process.env.NODE_ENV !== 'production' ? { otp } : {}),
+  });
+}
+
+export async function verifyPhoneOtp(req: Request, res: Response) {
+  const phone = normalizePhone(req.body?.phone);
+  const otp = String(req.body?.otp || '').trim();
+  const email = normalizeEmail(req.body?.email);
+  const name = String(req.body?.name || '').trim();
+
+  if (!phone || !otp) {
+    return res.status(400).json({ error: 'Phone number and OTP are required' });
+  }
+
+  const verification = verifyOtp(phone, otp);
+  if (!verification.ok) {
+    return res.status(400).json({ error: verification.reason });
+  }
+
+  try {
+    const { player, existed } = await resolveOrCreatePlayer({
+      phone,
+      email: email || verification.metadata?.email,
+      name: name || verification.metadata?.name,
+    });
+
+    return res.status(existed ? 200 : 201).json({
+      existed,
+      ...buildPlayerAuthResponse(player),
+    });
+  } catch (error) {
+    const statusCode = (error as any)?.statusCode || 500;
+    return res.status(statusCode).json({
+      error: error instanceof Error ? error.message : 'Failed to verify phone OTP',
+    });
+  }
+}
+
+export async function linkEmail(req: Request, res: Response) {
+  const playerId = req.authUser?.uid;
+  const email = normalizeEmail(req.body?.email);
+  const password = String(req.body?.password || '');
+
+  if (!playerId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (!email || password.length < 6) {
+    return res.status(400).json({ error: 'Email and a password of at least 6 characters are required' });
+  }
+
+  const currentPlayer = await PlayerModel.findById(playerId);
+  if (!currentPlayer) {
+    return res.status(404).json({ error: 'Player not found' });
+  }
+
+  const existing = await findPlayerByIdentifiers({ email });
+  if (existing && String(existing._id) !== String(currentPlayer._id)) {
+    return res.status(409).json({ error: 'Email already linked to another account' });
+  }
+
+  currentPlayer.email = email;
+  currentPlayer.password = hashPassword(password);
+  await currentPlayer.save();
+
+  return res.json(buildPlayerAuthResponse(currentPlayer));
+}
+
+export async function requestLinkPhoneOtp(req: Request, res: Response) {
+  const playerId = req.authUser?.uid;
+  const phone = normalizePhone(req.body?.phone);
+
+  if (!playerId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (!phone) {
+    return res.status(400).json({ error: 'Phone number is required' });
+  }
+
+  const otp = createOtp(phone, { playerId, action: 'link-phone' });
+  return res.json({
+    success: true,
+    phone,
+    ...(process.env.NODE_ENV !== 'production' ? { otp } : {}),
+  });
+}
+
+export async function verifyLinkPhoneOtp(req: Request, res: Response) {
+  const playerId = req.authUser?.uid;
+  const phone = normalizePhone(req.body?.phone);
+  const otp = String(req.body?.otp || '').trim();
+
+  if (!playerId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (!phone || !otp) {
+    return res.status(400).json({ error: 'Phone number and OTP are required' });
+  }
+
+  const verification = verifyOtp(phone, otp);
+  if (!verification.ok) {
+    return res.status(400).json({ error: verification.reason });
+  }
+
+  const currentPlayer = await PlayerModel.findById(playerId);
+  if (!currentPlayer) {
+    return res.status(404).json({ error: 'Player not found' });
+  }
+
+  const existing = await findPlayerByIdentifiers({ phone });
+  if (existing && String(existing._id) !== String(currentPlayer._id)) {
+    return res.status(409).json({ error: 'Phone already linked to another account' });
+  }
+
+  currentPlayer.phone = phone;
+  await currentPlayer.save();
+
+  return res.json(buildPlayerAuthResponse(currentPlayer));
 }

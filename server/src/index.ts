@@ -7,9 +7,14 @@ import { env, getAllowedOrigins } from './config/env.js';
 import { logger, requestLogger } from './config/logger.js';
 import { registerSocketHub } from './controllers/dataController.js';
 import { createSocketHub } from './realtime/socketHub.js';
+
 import { authRoutes } from './routes/authRoutes.js';
 import { dataRoutes } from './routes/dataRoutes.js';
+import { matchRoutes } from './routes/matchRoutes.js';
 import { newsRoutes } from './routes/newsRoutes.js';
+import { manageRoutes } from './routes/manageRoutes.js';
+import { playerRoutes } from './routes/playerRoutes.js';
+import { teamRoutes } from './routes/teamRoutes.js';
 
 async function startServer() {
   await connectDatabase();
@@ -63,9 +68,14 @@ async function startServer() {
     res.json({ ready: true, timestamp: new Date().toISOString() });
   });
 
+
   app.use('/api/auth', authRoutes);
   app.use('/api/data', dataRoutes);
+  app.use('/api/players', playerRoutes);
+  app.use('/api/teams', teamRoutes);
+  app.use('/api/matches', matchRoutes);
   app.use('/api/news', newsRoutes);
+  app.use('/api/manage', manageRoutes);
 
   const server = http.createServer(app);
   const socketHub = createSocketHub(server);

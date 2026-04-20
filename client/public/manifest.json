@@ -1,6 +1,6 @@
 {
   "name": "ScoreArena",
-  "short_name": "ScoreWala",
+  "short_name": "ScoreArena",
   "description": "Live Cricket Scoring App",
   "start_url": "/",
   "display": "standalone",
@@ -8,15 +8,15 @@
   "theme_color": "#FFC107",
   "icons": [
     {
-      "src": "https://api.dicebear.com/7.x/avataaars/svg?seed=scorearena&backgroundColor=ffc107",
+      "src": "/app-icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://api.dicebear.com/7.x/avataaars/svg?seed=scorearena&backgroundColor=ffc107",
+      "src": "/app-icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

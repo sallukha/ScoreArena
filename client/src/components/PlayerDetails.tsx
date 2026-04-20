@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db, doc, getDoc, onSnapshot, collection, query, where, orderBy, limit, handleFirestoreError, OperationType } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Trophy, Target, Zap, Award, Medal, History, ChevronRight, Share2 } from 'lucide-react';
+import { ArrowLeft, Trophy, Target, Zap, Award, Medal, History, ChevronRight, Share2, Trash2 } from 'lucide-react';
 import { Player, Match } from '../types';
+import { useDeletePlayerMutation } from '../features/players/hooks/usePlayerMutations';
+import { useAuth } from '../contexts/AuthContext';
 
 export const PlayerDetails = ({ playerId, onBack, onMatchClick }: { 
   playerId: string, 
@@ -13,6 +15,8 @@ export const PlayerDetails = ({ playerId, onBack, onMatchClick }: {
   const [recentMatches, setRecentMatches] = useState<any[]>([]);
   const [teamNames, setTeamNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const deletePlayerMutation = useDeletePlayerMutation();
+  const { user } = useAuth();
 
   useEffect(() => {
     const unsubPlayer = onSnapshot(doc(db, 'players', playerId), (snap) => {
@@ -47,6 +51,8 @@ export const PlayerDetails = ({ playerId, onBack, onMatchClick }: {
 
   if (loading || !player) return <div className="min-h-screen flex items-center justify-center"><div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
 
+  const canDeletePlayer = !!user && (user.role === 'admin' || user.uid === player.createdBy);
+
   const stats = {
     matches: player.stats?.matches || 0,
     runs: player.stats?.runs || 0,
@@ -63,6 +69,21 @@ export const PlayerDetails = ({ playerId, onBack, onMatchClick }: {
   const battingAvg = stats.matches > 0 ? (stats.runs / stats.matches).toFixed(2) : "0.00";
   const strikeRate = stats.balls > 0 ? ((stats.runs / stats.balls) * 100).toFixed(1) : "0.0";
   const economy = stats.ballsBowled > 0 ? ((stats.runsConceded / stats.ballsBowled) * 6).toFixed(2) : "0.00";
+
+  const handleDeletePlayer = async () => {
+    const confirmation = window.confirm(
+      `Delete player "${player.name}"?\n\nYe player team lists se bhi hat jayega.`
+    );
+    if (!confirmation) return;
+
+    try {
+      await deletePlayerMutation.mutateAsync(playerId);
+      onBack();
+    } catch (error) {
+      console.error('Failed to delete player:', error);
+      window.alert('Player delete nahi ho paya. Please try again.');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -97,6 +118,17 @@ export const PlayerDetails = ({ playerId, onBack, onMatchClick }: {
       </div>
 
       <div className="px-4 -mt-8 flex flex-col gap-6">
+        {canDeletePlayer && (
+          <button
+            onClick={handleDeletePlayer}
+            disabled={deletePlayerMutation.isPending}
+            className="w-full rounded-[1.75rem] border border-red-200 bg-red-50 px-4 py-4 flex items-center justify-center gap-3 text-red-700 font-black uppercase tracking-widest text-xs disabled:opacity-60"
+          >
+            <Trash2 size={16} />
+            {deletePlayerMutation.isPending ? 'Deleting Player...' : 'Delete Player'}
+          </button>
+        )}
+
         <div className="bg-black text-white rounded-[3rem] shadow-2xl p-8 grid grid-cols-3 gap-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/10 rounded-full -mr-32 -mt-32" />
           <StatBox label="Matches" value={String(stats.matches)} />
