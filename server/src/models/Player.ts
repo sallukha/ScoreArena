@@ -30,7 +30,7 @@ const PlayerSchema = new Schema(
 );
 
 // Custom validation: at least one of phone or email must exist
-PlayerSchema.pre('validate', function (next) {
+PlayerSchema.pre('validate', function (this: any, next: (err?: Error) => void) {
   if (!this.phone && !this.email) {
     this.invalidate('phone', 'Either phone or email is required.');
     this.invalidate('email', 'Either phone or email is required.');
