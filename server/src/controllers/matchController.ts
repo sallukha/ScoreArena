@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
-import { MatchModel } from '../models/Match.js';
-import { PlayerModel } from '../models/Player.js';
+import MatchModel from '../models/Match.js';
+import PlayerModel from '../models/Player.js';
+import mongoose from 'mongoose';
 
 function normalizePerformance(entry: any) {
   return {
@@ -59,7 +60,15 @@ export async function createMatch(req: Request, res: Response) {
     new Set(
       (Array.isArray(req.body?.players) ? req.body.players : performances.map((entry: any) => entry.playerId))
         .filter(Boolean)
-        .map((playerId: any) => String(playerId))
+        .map((playerId: any) => {
+          if (typeof playerId === 'string' && mongoose.isValidObjectId(playerId)) {
+            return new mongoose.Types.ObjectId(playerId);
+          } else if (playerId instanceof mongoose.Types.ObjectId) {
+            return playerId;
+          } else {
+            return String(playerId);
+          }
+        })
     )
   );
 

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
-import { MatchModel } from '../models/Match.js';
-import { PlayerModel } from '../models/Player.js';
-import { TeamModel } from '../models/Team.js';
+import MatchModel from '../models/Match.js';
+import PlayerModel from '../models/Player.js';
+import TeamModel from '../models/Team.js';
 
 // Delete a match by ID
 export async function deleteMatch(req: Request, res: Response) {

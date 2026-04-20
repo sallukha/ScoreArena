@@ -1,4 +1,16 @@
-import mongoose, { Schema, model } from 'mongoose';
+import mongoose, { Schema, model, Model, Document } from 'mongoose';
+
+export interface IPlayer extends Document {
+  name: string;
+  phone?: string;
+  email?: string;
+  password?: string;
+  matchesPlayed: number;
+  totalRuns: number;
+  totalWickets: number;
+  teams: mongoose.Types.ObjectId[];
+  createdAt: Date;
+}
 
 const PlayerSchema = new Schema(
   {
@@ -48,4 +60,5 @@ PlayerSchema.index({ email: 1 }, { unique: true, sparse: true });
 PlayerSchema.index({ name: 1, createdAt: -1 });
 PlayerSchema.index({ createdAt: -1 });
 
-export const PlayerModel = mongoose.models.Player || model('Player', PlayerSchema);
+const PlayerModel = (mongoose.models.Player as Model<IPlayer>) || model<IPlayer>('Player', PlayerSchema);
+export default PlayerModel;

@@ -1,4 +1,31 @@
-import mongoose, { Schema, model } from 'mongoose';
+import mongoose, { Schema, model, Model, Document } from 'mongoose';
+
+export interface IMatch extends Document {
+  teamA: string;
+  teamB: string;
+  tournamentId?: string;
+  status: 'upcoming' | 'live' | 'completed';
+  tossWinner?: string;
+  tossDecision?: string;
+  overs: number;
+  scoreA: any;
+  scoreB: any;
+  currentInnings: number;
+  striker?: string;
+  strikerName?: string;
+  nonStriker?: string;
+  nonStrikerName?: string;
+  bowler?: string;
+  bowlerName?: string;
+  playerStats?: any;
+  fallOfWickets?: any[];
+  players: mongoose.Types.ObjectId[];
+  createdBy: string;
+  performances?: any[];
+  matchDate: Date;
+  statsFinalized: boolean;
+  createdAt: Date;
+}
 
 const ScoreSchema = new Schema(
   {
@@ -74,4 +101,5 @@ MatchSchema.index({ tournamentId: 1, status: 1, createdAt: -1 });
 MatchSchema.index({ players: 1, matchDate: -1 });
 MatchSchema.index({ 'performances.playerId': 1, matchDate: -1 });
 
-export const MatchModel = mongoose.models.Match || model('Match', MatchSchema);
+const MatchModel = (mongoose.models.Match as Model<IMatch>) || model<IMatch>('Match', MatchSchema);
+export default MatchModel;

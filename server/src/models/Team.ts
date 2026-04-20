@@ -1,4 +1,13 @@
-import mongoose, { Schema, model } from 'mongoose';
+import mongoose, { Schema, model, Model, Document } from 'mongoose';
+
+export interface ITeam extends Document {
+  name: string;
+  logo?: string;
+  players: mongoose.Types.ObjectId[];
+  captainId?: mongoose.Types.ObjectId;
+  createdBy: string;
+  createdAt: Date;
+}
 
 const TeamSchema = new Schema(
   {
@@ -14,4 +23,5 @@ const TeamSchema = new Schema(
 TeamSchema.index({ createdBy: 1, createdAt: -1 });
 TeamSchema.index({ players: 1 });
 
-export const TeamModel = mongoose.models.Team || model('Team', TeamSchema);
+const TeamModel = (mongoose.models.Team as Model<ITeam>) || model<ITeam>('Team', TeamSchema);
+export default TeamModel;

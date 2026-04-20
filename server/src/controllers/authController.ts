@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { getFirebaseAdminAuth } from '../config/firebaseAdmin.js';
 import { logger } from '../config/logger.js';
-import { PlayerModel } from '../models/Player.js';
+import PlayerModel from '../models/Player.js';
 import { UserModel } from '../models/User.js';
 import { createAccessToken } from '../utils/jwt.js';
 import {
@@ -344,7 +344,7 @@ export async function linkEmail(req: Request, res: Response) {
     return res.status(400).json({ error: 'Email and a password of at least 6 characters are required' });
   }
 
-  const currentPlayer = await PlayerModel.findById(playerId).exec();
+  const currentPlayer = await PlayerModel.findById(playerId);
   if (!currentPlayer) {
     return res.status(404).json({ error: 'Player not found' });
   }

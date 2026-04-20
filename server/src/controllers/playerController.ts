@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { MatchModel } from '../models/Match.js';
-import { PlayerModel } from '../models/Player.js';
+import MatchModel from '../models/Match.js';
+import PlayerModel from '../models/Player.js';
 import { escapeRegex, findPlayerByIdentifiers, resolveOrCreatePlayer, sanitizePlayer } from '../utils/playerAuth.js';
 
 export async function resolvePlayer(req: Request, res: Response) {
