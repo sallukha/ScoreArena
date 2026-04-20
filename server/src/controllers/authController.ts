@@ -344,7 +344,7 @@ export async function linkEmail(req: Request, res: Response) {
     return res.status(400).json({ error: 'Email and a password of at least 6 characters are required' });
   }
 
-  const currentPlayer = await PlayerModel.findById(playerId);
+  const currentPlayer = await PlayerModel.findById(playerId).exec();
   if (!currentPlayer) {
     return res.status(404).json({ error: 'Player not found' });
   }

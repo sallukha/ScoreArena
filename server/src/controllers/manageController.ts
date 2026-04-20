@@ -9,7 +9,7 @@ export async function deleteMatch(req: Request, res: Response) {
   if (!matchId) {
     return res.status(400).json({ error: 'Match ID is required' });
   }
-  const match = await MatchModel.findById(matchId);
+  const match = await MatchModel.findById(matchId).exec();
   if (!match) {
     return res.status(404).json({ error: 'Match not found' });
   }
@@ -55,7 +55,7 @@ export async function deletePlayer(req: Request, res: Response) {
   if (!playerId) {
     return res.status(400).json({ error: 'Player ID is required' });
   }
-  const player = await PlayerModel.findById(playerId);
+  const player = await PlayerModel.findById(playerId).exec();
   if (!player) {
     return res.status(404).json({ error: 'Player not found' });
   }
