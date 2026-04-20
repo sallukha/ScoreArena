@@ -30,14 +30,12 @@ export async function getDocument(req: Request, res: Response) {
 
   return res.json({ doc });
 }
-
 export async function createDocument(req: Request, res: Response) {
   const { path, data } = req.body || {};
   const doc = await createDocumentByPath(String(path || ''), data);
   await socketHub?.publishDocumentChange(`${String(path || '')}/${doc.id}`);
   return res.status(201).json({ doc });
 }
-
 export async function setDocument(req: Request, res: Response) {
   const { path, data } = req.body || {};
   const doc = await setDocumentByPath(String(path || ''), data);
