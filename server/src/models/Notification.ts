@@ -14,5 +14,6 @@ const NotificationSchema = new Schema(
 
 NotificationSchema.index({ userId: 1, timestamp: -1 });
 
-export const NotificationModel =
-  mongoose.models.Notification || model('Notification', NotificationSchema);
+export const NotificationModel =mongoose.models.Notification || model('Notification', NotificationSchema);
+
+   

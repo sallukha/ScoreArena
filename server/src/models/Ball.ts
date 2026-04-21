@@ -23,4 +23,5 @@ const BallSchema = new Schema(
 
 BallSchema.index({ matchId: 1, innings: 1, timestamp: -1 });
 
-export const BallModel = mongoose.models.Ball || model('Ball', BallSchema);
+ const BallModel = mongoose.models.Ball || model('Ball', BallSchema);
+ export default BallModel;
