@@ -1,4 +1,4 @@
-import mongoose, { Schema, model } from 'mongoose';
+import mongoose, { Schema, model, Model } from 'mongoose';
 
 const BallSchema = new Schema(
   {
@@ -23,5 +23,5 @@ const BallSchema = new Schema(
 
 BallSchema.index({ matchId: 1, innings: 1, timestamp: -1 });
 
- const BallModel = mongoose.models.Ball || model('Ball', BallSchema);
+ const BallModel: Model<any> = (mongoose.models.Ball as Model<any>) || model<any>('Ball', BallSchema);
  export default BallModel;

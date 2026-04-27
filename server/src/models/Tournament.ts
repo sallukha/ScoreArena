@@ -1,4 +1,4 @@
-import mongoose, { Schema, model } from 'mongoose';
+import mongoose, { Schema, model, Model } from 'mongoose';
 
 const TournamentSchema = new Schema(
   {
@@ -22,4 +22,4 @@ const TournamentSchema = new Schema(
 
 TournamentSchema.index({ createdBy: 1, createdAt: -1 });
 
-export const TournamentModel = mongoose.models.Tournament || model('Tournament', TournamentSchema);
+export const TournamentModel: Model<any> = (mongoose.models.Tournament as Model<any>) || model<any>('Tournament', TournamentSchema);

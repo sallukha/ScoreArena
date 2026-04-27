@@ -1,4 +1,4 @@
-import mongoose, { Schema, model } from 'mongoose';
+import mongoose, { Schema, model, Model } from 'mongoose';
 
 const ScoreSchema = new Schema(
   {
@@ -74,5 +74,5 @@ MatchSchema.index({ tournamentId: 1, status: 1, createdAt: -1 });
 MatchSchema.index({ players: 1, matchDate: -1 });
 MatchSchema.index({ 'performances.playerId': 1, matchDate: -1 });
 
-const MatchModel = mongoose.models.Match || model('Match', MatchSchema);
+const MatchModel: Model<any> = (mongoose.models.Match as Model<any>) || model<any>('Match', MatchSchema);
 export default MatchModel;

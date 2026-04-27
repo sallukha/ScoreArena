@@ -1,4 +1,4 @@
-import mongoose, { Schema, model } from 'mongoose';
+import mongoose, { Schema, model, Model } from 'mongoose';
 
 const NotificationSchema = new Schema(
   {
@@ -14,6 +14,6 @@ const NotificationSchema = new Schema(
 
 NotificationSchema.index({ userId: 1, timestamp: -1 });
 
-export const NotificationModel =mongoose.models.Notification || model('Notification', NotificationSchema);
+export const NotificationModel: Model<any> = (mongoose.models.Notification as Model<any>) || model<any>('Notification', NotificationSchema);
 
    

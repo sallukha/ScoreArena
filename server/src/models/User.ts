@@ -1,4 +1,4 @@
-import mongoose, { Schema, model } from 'mongoose';
+import mongoose, { Schema, model, Model } from 'mongoose';
 
 const UserSchema = new Schema(
   {
@@ -18,4 +18,4 @@ const UserSchema = new Schema(
 UserSchema.index({ email: 1 });
 UserSchema.index({ phoneNumber: 1 });
 
-export const UserModel = mongoose.models.User || model('User', UserSchema);
+export const UserModel: Model<any> = (mongoose.models.User as Model<any>) || model<any>('User', UserSchema);

@@ -1,10 +1,10 @@
 import BallModel from '../models/Ball.js';
 import MatchModel from '../models/Match.js';
-import NotificationModel from '../models/Notification.js';
+import { NotificationModel } from '../models/Notification.js';
 import PlayerModel from '../models/Player.js';
 import TeamModel from '../models/Team.js';
-import TournamentModel from '../models/Tournament.js';
-import UserModel from '../models/User.js';
+import { TournamentModel } from '../models/Tournament.js';
+import { UserModel } from '../models/User.js';
 
 const topLevelModels = {
   users: UserModel,
