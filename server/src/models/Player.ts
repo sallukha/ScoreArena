@@ -82,8 +82,7 @@ const PlayerSchema = new Schema(
   { timestamps: true, versionKey: false }
 );
 
-// Custom validation: at least one of phone or email must exist
-PlayerSchema.pre('validate', function (this: any, next: (err?: Error) => void) {
+PlayerSchema.pre('validate', function (this: any) {
   if (!this.phone) {
     this.phone = undefined;
   }
@@ -112,7 +111,6 @@ PlayerSchema.pre('validate', function (this: any, next: (err?: Error) => void) {
     this.invalidate('phoneNumber', 'Invalid phone number');
   }
 
-  next();
 });
 
 PlayerSchema.index({ phone: 1 }, { unique: true, sparse: true });
