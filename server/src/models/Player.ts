@@ -28,14 +28,14 @@ const PlayerSchema = new Schema(
       unique: true,
       sparse: true,
       trim: true,
-      default: null,
+      default: undefined,
     },
     phoneNumber: {
       type: String,
       unique: true,
       sparse: true,
       trim: true,
-      default: null,
+      default: undefined,
     },
     email: {
       type: String,
@@ -43,7 +43,7 @@ const PlayerSchema = new Schema(
       sparse: true,
       trim: true,
       lowercase: true,
-      default: null,
+      default: undefined,
       match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Invalid email address'],
     },
     password: { type: String, default: null },
@@ -84,6 +84,18 @@ const PlayerSchema = new Schema(
 
 // Custom validation: at least one of phone or email must exist
 PlayerSchema.pre('validate', function (this: any, next: (err?: Error) => void) {
+  if (!this.phone) {
+    this.phone = undefined;
+  }
+
+  if (!this.phoneNumber) {
+    this.phoneNumber = undefined;
+  }
+
+  if (!this.email) {
+    this.email = undefined;
+  }
+
   if (this.phone && !this.phoneNumber) {
     this.phoneNumber = this.phone;
   }
