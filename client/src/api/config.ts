@@ -1,5 +1,6 @@
 const LOCAL_API_FALLBACK = 'http://127.0.0.1:3000/api';
 const EMULATOR_API = 'http://10.0.2.2:3000/api';
+const PRODUCTION_API_FALLBACK = 'https://scorearena-1.onrender.com/api';
 
 function trimTrailingSlash(value: string) {
   return value.replace(/\/$/, '');
@@ -21,8 +22,8 @@ export function getApiBaseUrl() {
 
   // Check if running in mobile app
   if (isMobileApp()) {
-    console.log('Mobile app detected, using emulator backend:', EMULATOR_API);
-    return EMULATOR_API;
+    console.log('Mobile app detected, using production backend:', PRODUCTION_API_FALLBACK);
+    return PRODUCTION_API_FALLBACK;
   }
 
   const hostname = window.location.hostname;
@@ -41,8 +42,8 @@ export function getApiBaseUrl() {
   }
 
   // Fallback for any other case
-  console.log('Using fallback backend:', LOCAL_API_FALLBACK);
-  return LOCAL_API_FALLBACK;
+  console.log('Using fallback backend:', PRODUCTION_API_FALLBACK);
+  return PRODUCTION_API_FALLBACK;
 }
 
 export function getSocketBaseUrl() {
