@@ -309,6 +309,20 @@ const PlayerSelectionModal = ({
   );
 };
 
+const fetchPlayersByIds = async (playerIds: string[]) => {
+  const uniqueIds = Array.from(new Set(playerIds.filter(Boolean).map(String)));
+  const players: Player[] = [];
+
+  for (let i = 0; i < uniqueIds.length; i += 10) {
+    const chunk = uniqueIds.slice(i, i + 10);
+    const snap = await getDocs(query(collection(db, 'players'), where('__name__', 'in', chunk)));
+    players.push(...snap.docs.map((item) => ({ id: item.id, ...item.data() } as Player)));
+  }
+
+  const byId = new Map(players.map((player) => [player.id, player]));
+  return uniqueIds.map((id) => byId.get(id)).filter(Boolean) as Player[];
+};
+
 const WicketModal = ({
   isOpen,
   onClose,
@@ -511,6 +525,14 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     bowlerName: string;
     scoreline: string;
   }>(null);
+  const [inningsChangeNotice, setInningsChangeNotice] = useState<null | {
+    battingTeamName: string;
+    bowlingTeamName: string;
+    scoreline: string;
+    reason: 'all-out' | 'overs-complete';
+    target: number;
+  }>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const updateMatchMutation = useUpdateMatchMutation();
   const createMatchBallMutation = useCreateMatchBallMutation();
   const deleteMatchBallMutation = useDeleteMatchBallMutation();
@@ -544,8 +566,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    // The match listener will trigger fetchTeamData automatically
-    // but we can force a re-fetch of team data if needed
+    setRefreshVersion((version) => version + 1);
     setIsRefreshing(false);
   };
   const [extraMode, setExtraMode] = useState<'wide' | 'no-ball' | null>(null);
@@ -566,6 +587,17 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       overNumber,
       bowlerName: bowlerName || 'Current Bowler',
       scoreline,
+    });
+  };
+
+  const openInningsChangeNotice = (scoreline: string, reason: 'all-out' | 'overs-complete', target: number) => {
+    setOverEndNotice(null);
+    setInningsChangeNotice({
+      battingTeamName: teamB?.name || 'Next Batting Team',
+      bowlingTeamName: teamA?.name || 'Fielding Team',
+      scoreline,
+      reason,
+      target,
     });
   };
 
@@ -644,71 +676,6 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         const data = snap.data() as Match;
         setMatch({ id: snap.id, ...data });
 
-        // Fetch teams and their players
-        const fetchTeamData = async () => {
-          try {
-            const [sA, sB] = await Promise.all([
-              getDoc(doc(db, 'teams', data.teamA)),
-              getDoc(doc(db, 'teams', data.teamB))
-            ]);
-
-            if (sA.exists()) setTeamA({ id: sA.id, ...sA.data() } as Team);
-            if (sB.exists()) setTeamB({ id: sB.id, ...sB.data() } as Team);
-
-            const battingTeamId = data.currentInnings === 1 ? data.teamA : data.teamB;
-            const bowlingTeamId = data.currentInnings === 1 ? data.teamB : data.teamA;
-
-            const [battingSnap, bowlingSnap] = await Promise.all([
-              getDocs(query(collection(db, 'players'), where('createdBy', '==', data.createdBy))),
-              getDocs(query(collection(db, 'players'), where('createdBy', '==', auth.currentUser?.uid)))
-            ]);
-
-            const tAData = sA.data() as Team;
-            const tBData = sB.data() as Team;
-
-            // Combine players from both match creator and current user
-            const allPlayersMap = new Map<string, Player>();
-            battingSnap.docs.forEach(d => allPlayersMap.set(d.id, { id: d.id, ...d.data() } as Player));
-            bowlingSnap.docs.forEach(d => allPlayersMap.set(d.id, { id: d.id, ...d.data() } as Player));
-
-            const allPlayers = Array.from(allPlayersMap.values());
-            console.log('Scorer: Total unique players fetched:', allPlayers.length);
-
-            const currentBattingTeamPlayers = (data.currentInnings === 1 ? tAData.players : tBData.players) || [];
-            const currentBowlingTeamPlayers = (data.currentInnings === 1 ? tBData.players : tAData.players) || [];
-
-            const bPlayers = allPlayers.filter(p => currentBattingTeamPlayers.includes(p.id));
-            const boPlayers = allPlayers.filter(p => currentBowlingTeamPlayers.includes(p.id));
-
-            // If we still have missing players, try to fetch them by ID
-            if (bPlayers.length < currentBattingTeamPlayers.length || boPlayers.length < currentBowlingTeamPlayers.length) {
-              console.log('Scorer: Some players missing, fetching by ID...');
-              const missingIds = [...currentBattingTeamPlayers, ...currentBowlingTeamPlayers].filter(id => !allPlayersMap.has(id));
-
-              // Fetch missing players in chunks of 10 (Firestore limit for 'in' query)
-              for (let i = 0; i < missingIds.length; i += 10) {
-                const chunk = missingIds.slice(i, i + 10);
-                const missingSnap = await getDocs(query(collection(db, 'players'), where('__name__', 'in', chunk)));
-                missingSnap.docs.forEach(d => {
-                  const p = { id: d.id, ...d.data() } as Player;
-                  allPlayersMap.set(d.id, p);
-                });
-              }
-
-              const updatedAllPlayers = Array.from(allPlayersMap.values());
-              setBattingPlayers(updatedAllPlayers.filter(p => currentBattingTeamPlayers.includes(p.id)));
-              setBowlingPlayers(updatedAllPlayers.filter(p => currentBowlingTeamPlayers.includes(p.id)));
-            } else {
-              setBattingPlayers(bPlayers);
-              setBowlingPlayers(boPlayers);
-            }
-
-          } catch (err) {
-            console.error('Scorer: Error fetching team/player data:', err);
-          }
-        };
-
-        fetchTeamData();
       } else {
         console.error('Scorer: Match not found:', matchId);
       }
@@ -719,6 +686,64 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     });
     return () => unsub();
   }, [matchId]);
+
+  useEffect(() => {
+    if (!match?.teamA || !match?.teamB) return;
+
+    let cancelled = false;
+    const fetchTeams = async () => {
+      try {
+        const [sA, sB] = await Promise.all([
+          getDoc(doc(db, 'teams', match.teamA)),
+          getDoc(doc(db, 'teams', match.teamB)),
+        ]);
+
+        if (cancelled) return;
+        setTeamA(sA.exists() ? ({ id: sA.id, ...sA.data() } as Team) : null);
+        setTeamB(sB.exists() ? ({ id: sB.id, ...sB.data() } as Team) : null);
+      } catch (err) {
+        console.error('Scorer: Error fetching teams:', err);
+      }
+    };
+
+    fetchTeams();
+    return () => {
+      cancelled = true;
+    };
+  }, [match?.teamA, match?.teamB, refreshVersion]);
+
+  useEffect(() => {
+    if (!match || !teamA || !teamB) return;
+
+    let cancelled = false;
+    const battingIds = match.currentInnings === 1 ? (teamA.players || []) : (teamB.players || []);
+    const bowlingIds = match.currentInnings === 1 ? (teamB.players || []) : (teamA.players || []);
+
+    const fetchCurrentInningsPlayers = async () => {
+      try {
+        const loadedPlayers = await fetchPlayersByIds([...battingIds, ...bowlingIds]);
+        if (cancelled) return;
+
+        const byId = new Map(loadedPlayers.map((player) => [player.id, player]));
+        setBattingPlayers(battingIds.map((id) => byId.get(String(id))).filter(Boolean) as Player[]);
+        setBowlingPlayers(bowlingIds.map((id) => byId.get(String(id))).filter(Boolean) as Player[]);
+      } catch (err) {
+        console.error('Scorer: Error fetching innings players:', err);
+      }
+    };
+
+    fetchCurrentInningsPlayers();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    match?.currentInnings,
+    match?.id,
+    teamA?.id,
+    teamB?.id,
+    (teamA?.players || []).join('|'),
+    (teamB?.players || []).join('|'),
+  ]);
 
   const updateMatchPlayer = async (type: 'striker' | 'nonStriker' | 'bowler', playerId: string) => {
     if (!match) return;
@@ -757,12 +782,18 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
     const teamData = teamSnap.data() as Team;
     const existingPlayers = teamData.players || [];
-    if (existingPlayers.includes(playerId)) return;
+    const nextPlayers = Array.from(new Set([...existingPlayers, playerId]));
 
-    await updateTeamMutation.mutateAsync({
-      teamId,
-      payload: { players: Array.from(new Set([...existingPlayers, playerId])) },
-    });
+    if (!existingPlayers.includes(playerId)) {
+      await updateTeamMutation.mutateAsync({
+        teamId,
+        payload: { players: nextPlayers },
+      });
+    }
+
+    const nextTeam = { id: teamSnap.id, ...teamData, players: nextPlayers } as Team;
+    if (teamId === teamA?.id) setTeamA(nextTeam);
+    if (teamId === teamB?.id) setTeamB(nextTeam);
   };
 
   const handleFindPlayerByContact = async (contact: string) => {
@@ -1076,6 +1107,15 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         },
       });
 
+      if (isInningsOver) {
+        openInningsChangeNotice(
+          `${newRuns}-${currentScore.wickets}`,
+          newOvers === match.overs && newBalls === 0 ? 'overs-complete' : 'all-out',
+          newRuns + 1
+        );
+        return;
+      }
+
       if (isLegalBall && newBalls === 0 && !isInningsOver && !isMatchOver) {
         openOverEndNotice(newOvers, match.bowlerName || 'Current Bowler', `${newRuns}-${currentScore.wickets}`);
       }
@@ -1248,6 +1288,15 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           timestamp: new Date(),
         },
       });
+
+      if (isInningsOver) {
+        openInningsChangeNotice(
+          `${currentScore.runs}-${newWickets}`,
+          isAllOut ? 'all-out' : 'overs-complete',
+          currentScore.runs + 1
+        );
+        return;
+      }
 
       if (isLegalBall && newBalls === 0 && !isInningsOver && !isMatchOver) {
         openOverEndNotice(newOvers, match.bowlerName || 'Current Bowler', `${currentScore.runs}-${newWickets}`);
@@ -1585,6 +1634,75 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                     className="rounded-2xl bg-black text-white py-3.5 text-[11px] font-black uppercase tracking-[0.18em] shadow-xl"
                   >
                     Select Bowler
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {inningsChangeNotice && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[145] bg-black/70 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              className="fixed inset-x-4 top-1/2 z-[155] -translate-y-1/2 rounded-[2rem] bg-white p-6 shadow-2xl border border-yellow-100 max-w-sm mx-auto"
+            >
+              <div className="flex flex-col gap-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-yellow-600">
+                      {inningsChangeNotice.reason === 'all-out' ? 'All Out' : 'Innings Complete'}
+                    </p>
+                    <h3 className="text-3xl font-black italic uppercase tracking-tight text-gray-900 mt-2">
+                      Team Swap
+                    </h3>
+                  </div>
+                  <div className="h-14 w-14 rounded-[1.4rem] bg-yellow-500 text-black flex items-center justify-center shadow-lg shadow-yellow-500/25">
+                    <ChevronRight size={26} />
+                  </div>
+                </div>
+
+                <div className="rounded-[1.6rem] bg-gray-50 border border-gray-100 p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Next Batting</p>
+                      <p className="text-base font-black text-gray-900 truncate">{inningsChangeNotice.battingTeamName}</p>
+                    </div>
+                    <div className="text-right min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Target</p>
+                      <p className="text-base font-black text-gray-900">{inningsChangeNotice.target}</p>
+                    </div>
+                  </div>
+                  <div className="h-px bg-gray-200" />
+                  <p className="text-xs font-bold text-gray-500">
+                    {inningsChangeNotice.bowlingTeamName} ab bowling karegi. Pehli innings score: {inningsChangeNotice.scoreline}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setInningsChangeNotice(null)}
+                    className="rounded-2xl bg-gray-100 text-gray-700 py-3.5 text-[11px] font-black uppercase tracking-[0.18em]"
+                  >
+                    Later
+                  </button>
+                  <button
+                    onClick={() => {
+                      setInningsChangeNotice(null);
+                      setSelectionType('striker');
+                    }}
+                    className="rounded-2xl bg-black text-white py-3.5 text-[11px] font-black uppercase tracking-[0.18em] shadow-xl"
+                  >
+                    Start Batting
                   </button>
                 </div>
               </div>
