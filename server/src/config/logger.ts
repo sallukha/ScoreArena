@@ -14,6 +14,17 @@ export const logger = winston.createLogger({
 });
 
 export const requestLogger = morgan('combined', {
+  skip(req, res) {
+    if (req.method === 'OPTIONS') return true;
+    const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+
+    const isMissingDocumentLookup =
+      req.method === 'GET' &&
+      pathname === '/api/data/document' &&
+      res.statusCode === 404;
+
+    return isMissingDocumentLookup;
+  },
   stream: {
     write(message: string) {
       logger.info(message.trim(), { scope: 'http' });

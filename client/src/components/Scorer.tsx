@@ -539,7 +539,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   const updateTeamMutation = useUpdateTeamMutation();
 
   const handleShareLiveScore = async () => {
-    if (!teamA || !teamB) return;
+    if (!match || !teamA || !teamB) return;
 
     const inningsScore = match.currentInnings === 1 ? match.scoreA : match.scoreB;
     const shareUrl = `${window.location.origin}${window.location.pathname}?matchId=${encodeURIComponent(matchId)}`;
@@ -661,7 +661,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       where('innings', '==', match?.currentInnings || 1)
     );
     const unsub = onSnapshot(q, (snap) => {
-      setRecentBalls(snap.docs.map(d => ({ id: d.id, ...d.data() })).slice(0, 6).reverse());
+      setRecentBalls(snap.docs.map((d: { id: string; data: () => any }) => ({ id: d.id, ...d.data() })).slice(0, 6).reverse());
     });
     return () => unsub();
   }, [matchId, match?.currentInnings]);
@@ -671,8 +671,8 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     const unsub = onSnapshot(doc(db, 'matches', matchId), (snap) => {
       if (snap.exists()) {
         console.log('Scorer: Match data received');
-        const data = snap.data() as Match;
-        setMatch({ id: snap.id, ...data });
+        const { id: _matchDataId, ...data } = snap.data() as Match;
+        setMatch({ ...data, id: snap.id });
 
       } else {
         console.error('Scorer: Match not found:', matchId);
@@ -697,8 +697,19 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         ]);
 
         if (cancelled) return;
-        setTeamA(sA.exists() ? ({ id: sA.id, ...sA.data() } as Team) : null);
-        setTeamB(sB.exists() ? ({ id: sB.id, ...sB.data() } as Team) : null);
+        if (sA.exists()) {
+          const { id: _teamADataId, ...teamAData } = sA.data() as Team;
+          setTeamA({ ...teamAData, id: sA.id });
+        } else {
+          setTeamA(null);
+        }
+
+        if (sB.exists()) {
+          const { id: _teamBDataId, ...teamBData } = sB.data() as Team;
+          setTeamB({ ...teamBData, id: sB.id });
+        } else {
+          setTeamB(null);
+        }
       } catch (err) {
         console.error('Scorer: Error fetching teams:', err);
       }
@@ -789,7 +800,8 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       });
     }
 
-    const nextTeam = { id: teamSnap.id, ...teamData, players: nextPlayers } as Team;
+    const { id: _teamDataId, ...teamWithoutId } = teamData;
+    const nextTeam = { ...teamWithoutId, id: teamSnap.id, players: nextPlayers } as Team;
     if (teamId === teamA?.id) setTeamA(nextTeam);
     if (teamId === teamB?.id) setTeamB(nextTeam);
   };
@@ -1018,8 +1030,8 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     }
 
     // Striker Swapping
-    let newStriker = strikerId;
-    let newNonStriker = nonStrikerId;
+    let newStriker: string | undefined = strikerId;
+    let newNonStriker: string | undefined = nonStrikerId;
 
     // Swap on odd runs (only if runs off bat)
     const runsOffBat = !isExtra || extraType === 'no-ball';
@@ -1050,8 +1062,8 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
       if (isInningsOver) {
         console.log('Scorer: Innings over, resetting players');
-        newStriker = null;
-        newNonStriker = null;
+        newStriker = undefined;
+        newNonStriker = undefined;
       }
 
       const recentBalls = [...(match.recentBalls || [])];
@@ -1079,9 +1091,9 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           currentInnings: isInningsOver ? 2 : match.currentInnings,
           playerStats,
           recentBalls,
-          striker: newStriker,
+          striker: newStriker || null,
           strikerName: newStriker === strikerId ? (match.strikerName || null) : (newStriker === nonStrikerId ? (match.nonStrikerName || null) : null),
-          nonStriker: newNonStriker,
+          nonStriker: newNonStriker || null,
           nonStrikerName: newNonStriker === nonStrikerId ? (match.nonStrikerName || null) : (newNonStriker === strikerId ? (match.strikerName || null) : null),
           bowler: isInningsOver ? null : (bowlerId || null),
           bowlerName: isInningsOver ? null : (match.bowlerName || null),
