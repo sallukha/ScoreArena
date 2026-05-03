@@ -418,7 +418,6 @@ const WicketModal = ({
     </AnimatePresence>
   );
 };
-
 const ExtrasModal = ({
   isOpen,
   onClose,
@@ -436,7 +435,6 @@ const ExtrasModal = ({
     { id: 'leg-bye', label: 'Leg Bye' },
     { id: 'penalty', label: 'Penalty' },
   ];
-
   return (
     <AnimatePresence>
       {isOpen && (
