@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import MatchModel from '../models/Match.js';
 import PlayerModel from '../models/Player.js';
 import TeamModel from '../models/Team.js';
@@ -60,28 +61,55 @@ export async function deletePlayer(req: Request, res: Response) {
     return res.status(404).json({ error: 'Player not found' });
   }
 
+  const playerObjectId = new mongoose.Types.ObjectId(playerId);
+  const playerIdValues = [playerObjectId, playerId];
+
   await TeamModel.updateMany(
-    { players: player._id },
+    { players: { $in: playerIdValues } },
     {
-      $pull: { players: player._id },
+      $pull: { players: { $in: playerIdValues } },
     }
   );
 
   await TeamModel.updateMany(
-    { captainId: player._id },
+    { captainId: { $in: playerIdValues } },
     {
       $set: { captainId: null },
     }
   );
 
+  await PlayerModel.updateOne({ _id: playerObjectId }, { $set: { teams: [] } });
+
   await MatchModel.updateMany(
-    { players: player._id },
+    { players: { $in: playerIdValues } },
     {
       $pull: {
-        players: player._id,
-        performances: { playerId: player._id },
+        players: { $in: playerIdValues },
+        performances: { playerId: { $in: playerIdValues } },
       },
     }
+  );
+
+  await MatchModel.updateMany(
+    {
+      $or: [
+        { striker: playerId },
+        { nonStriker: playerId },
+        { bowler: playerId },
+      ],
+    },
+    [
+      {
+        $set: {
+          striker: { $cond: [{ $eq: ['$striker', playerId] }, '', '$striker'] },
+          strikerName: { $cond: [{ $eq: ['$striker', playerId] }, '', '$strikerName'] },
+          nonStriker: { $cond: [{ $eq: ['$nonStriker', playerId] }, '', '$nonStriker'] },
+          nonStrikerName: { $cond: [{ $eq: ['$nonStriker', playerId] }, '', '$nonStrikerName'] },
+          bowler: { $cond: [{ $eq: ['$bowler', playerId] }, '', '$bowler'] },
+          bowlerName: { $cond: [{ $eq: ['$bowler', playerId] }, '', '$bowlerName'] },
+        },
+      },
+    ] as any
   );
 
   await PlayerModel.deleteOne({ _id: playerId });

@@ -75,10 +75,11 @@ function scorePlayerIdentityMatch(player: Player, identity: PlayerIdentity) {
   const playerEmail = normalizeEmail(player.email);
   const playerPhone = normalizePhone(player.phoneNumber);
 
-  if (identity.uid && player.createdBy === identity.uid) score += 100;
-  if (identityEmail && playerEmail && identityEmail === playerEmail) score += 40;
-  if (identityPhone && playerPhone && identityPhone === playerPhone) score += 40;
-  if (identityEmail && identityPhone && identityEmail === playerEmail && identityPhone === playerPhone) score += 20;
+  // Prefer explicit contact linkage over "createdBy" ownership.
+  if (identityEmail && playerEmail && identityEmail === playerEmail) score += 200;
+  if (identityPhone && playerPhone && identityPhone === playerPhone) score += 200;
+  if (identity.uid && player.createdBy === identity.uid) score += 80;
+  if (identityEmail && identityPhone && identityEmail === playerEmail && identityPhone === playerPhone) score += 50;
   score += Number(player.stats?.matches || 0) * 0.01;
 
   return score;

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { LogOut, Pencil, Check, X } from 'lucide-react';
-import { db, doc, getDocs, setDoc, query, collection, where, onSnapshot, limit } from '../firebase';
+import { db, doc, getDocs, setDoc, query, collection, where, limit } from '../firebase';
 import { optimizeProfileImage } from '../lib/imageUtils';
 import { useAuth } from '../contexts/AuthContext';
 import { StatBox } from '../components/ui/StatBox';
-import { findPrimaryPlayerByIdentity, normalizePhone } from '../utils/playerLookup';
+import { normalizePhone } from '../utils/playerLookup';
+import { subscribePrimaryPlayerByIdentity } from '../features/players/services/playerService';
 
 export const Profile = () => {
     const { user, logout } = useAuth();
@@ -21,25 +22,13 @@ export const Profile = () => {
 
     useEffect(() => {
         if (!user) return;
+        const unsubscribePlayer = subscribePrimaryPlayerByIdentity(
+            { uid: user.uid, email: user.email, phoneNumber: user.phoneNumber },
+            (player) => setPlayerStats(player || null),
+            (error) => console.error('Error resolving linked profile player:', error),
+        );
 
-        const qByUid = query(collection(db, 'players'), where('createdBy', '==', user.uid), limit(1));
-        const unsubByUid = onSnapshot(qByUid, (snap) => {
-            if (!snap.empty) {
-                setPlayerStats({ id: snap.docs[0].id, ...snap.docs[0].data() });
-            } else {
-                findPrimaryPlayerByIdentity({
-                    uid: user.uid,
-                    email: user.email,
-                    phoneNumber: user.phoneNumber,
-                }).then((player) => {
-                    setPlayerStats(player || null);
-                }).catch((error) => {
-                    console.error('Error resolving linked profile player:', error);
-                });
-            }
-        });
-
-        return () => unsubByUid();
+        return unsubscribePlayer;
     }, [user]);
 
     useEffect(() => {
