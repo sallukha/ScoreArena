@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    image: scorearena-api:latest
+    container_name: scorearena-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Adjust MONGO_URI to point to the local mongo container
+      - MONGO_URI=mongodb://mongo:27017/scorearena
+      # - FIREBASE_SERVICE_ACCOUNT=your_firebase_admin_json_string
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - scorearena-network
+
+  web:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        # Example of passing build arg for production API URL
+        - VITE_API_BASE_URL=http://localhost:3000/api
+    image: scorearena-web:latest
+    container_name: scorearena-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    networks:
+      - scorearena-network
+
+  mongo:
+    image: mongo:6.0
+    container_name: scorearena-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - scorearena-network
+
+volumes:
+  mongo-data:
+
+networks:
+  scorearena-network:
+    driver: bridge

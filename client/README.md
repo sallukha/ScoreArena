@@ -1,53 +1,62 @@
-# Client Deployment
+# ScoreArena Frontend (Client) 📱
 
-## Build And Web Deployment
+This is the client-side application for ScoreArena, engineered to deliver a fast, responsive, and mobile-native feel using web technologies.
 
-1. Create `client/.env` from `client/.env.example`.
-2. Set `VITE_API_BASE_URL` to the public backend URL, for example `https://api.example.com/api`.
-3. Install dependencies:
-   `npm install`
-4. Build:
-   `npm run build`
-5. Upload the contents of `dist/` to an S3 bucket configured for static hosting.
-6. Put CloudFront in front of the bucket.
-7. Configure CloudFront invalidation after each deploy.
+## 🛠️ Technology Stack
 
-Recommended AWS setup:
+- **Framework:** React 19 + Vite
+- **Styling:** Tailwind CSS 4 & Lucide React for iconography
+- **Real-Time:** Socket.IO Client for instant score updates
+- **Mobile Native:** Capacitor (Core & Plugins) for Android/iOS builds
+- **Authentication:** Firebase Auth (`@capacitor-firebase/authentication`)
+- **Animations:** Motion (Framer Motion) for smooth page transitions and micro-interactions
 
-- S3 bucket holds the generated `dist/` files
-- CloudFront serves the app globally
-- Route53 points your domain to CloudFront
-- The backend API stays on a separate subdomain such as `api.example.com`
+## 📁 Project Structure
 
-## Capacitor Workflow
+The codebase inside `src/` is modularized for maintainability:
 
-1. Install deps in `client/`.
+- `api/`: API base URLs and Axios/Fetch transport abstractions.
+- `app/`: Global layout and initialization wrappers.
+- `components/`: Reusable UI components (Navbar, Modals, Forms, Scorers).
+- `contexts/`: React Context providers (e.g., `AuthContext`).
+- `features/`: Domain-specific logic or grouped feature components.
+- `firebase/`: Firebase initialization and auth integration.
+- `hooks/`: Custom React hooks for fetching data (`useLiveMatches`, `useUserCricketData`).
+- `pages/`: Top-level route components (Home, Profile, Tournaments).
+
+## ⚡ How It Works
+
+The app employs a hybrid data-fetching strategy:
+1. **REST APIs:** Used for loading static or less frequently changing data (user profiles, historical matches, team lists).
+2. **WebSockets (Socket.IO):** When a user views a "Live Match" or acts as a "Scorer", the app connects to the Socket.IO room for that specific match to listen for or emit ball-by-ball updates.
+
+## 🚀 Deployment & Mobile Build
+
+### Web Deployment (AWS S3 + CloudFront)
+1. Ensure `VITE_API_BASE_URL` is set in your `.env`.
 2. Run `npm run build`.
-3. Sync Capacitor:
-   `npm run cap:sync`
-4. Open Android Studio:
-   `npm run cap:open`
-5. Generate APK/AAB from Android Studio, or run inside `client/android/`:
-   `./gradlew assembleRelease`
+3. Upload the generated `dist/` folder to an S3 bucket configured for static website hosting.
+4. Set up CloudFront distribution pointing to the S3 bucket.
 
-For iOS on macOS:
+### Native Mobile Build (Capacitor)
+ScoreArena is fully prepared to be distributed as a native app on the Google Play Store and Apple App Store.
 
-1. Add iOS once:
-   `npx cap add ios`
-2. Sync:
-   `npx cap sync ios`
-3. Open Xcode:
-   `npx cap open ios`
+**For Android:**
+```bash
+npm run build
+npx cap sync android
+npx cap open android
+```
+*Use Android Studio to generate the signed APK/AAB.*
 
-## Mobile Asset Generation
+**For iOS (Requires macOS):**
+```bash
+npx cap add ios
+npx cap sync ios
+npx cap open ios
+```
+*Use Xcode to build and archive the application.*
 
-1. Update app icons and splash assets in the Capacitor project.
-2. Run a fresh frontend build.
-3. Run `npm run cap:sync`.
-4. Rebuild native binaries from Android Studio or Xcode.
-
-Every time the React code changes, repeat:
-
-1. `npm run build`
-2. `npm run cap:sync`
-3. Rebuild the native project
+## 💡 Planned Enhancements
+- **React Query Migration:** Moving all data fetching to `@tanstack/react-query` (currently installed but can be utilized more heavily) for built-in caching and retry logic.
+- **Service Workers / PWA:** Enhancing the current caching strategy for a seamless offline-first experience.
