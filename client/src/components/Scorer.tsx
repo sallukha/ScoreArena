@@ -17,6 +17,7 @@ const PlayerSelectionModal = ({
   onSelect,
   title,
   selectedIds = [],
+  dismissedIds = [],
   onAddPlayer,
   onFindPlayerByContact,
   onSearchPlayersByContact,
@@ -28,6 +29,7 @@ const PlayerSelectionModal = ({
   onSelect: (id: string) => void,
   title: string,
   selectedIds?: string[],
+  dismissedIds?: string[],
   onAddPlayer?: (payload: { name: string; contact?: string }) => void,
   onFindPlayerByContact?: (contact: string) => Promise<Player | null>,
   onSearchPlayersByContact?: (contact: string) => Promise<Player[]>,
@@ -43,6 +45,7 @@ const PlayerSelectionModal = ({
   const [contactMessage, setContactMessage] = useState('');
 
   const filtered = players.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const dismissedSet = new Set(dismissedIds);
 
   useEffect(() => {
     if (!isOpen) {
@@ -280,7 +283,7 @@ const PlayerSelectionModal = ({
                     key={player.id}
                     onClick={() => { onSelect(player.id); onClose(); }}
                     disabled={selectedIds.includes(player.id)}
-                    className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${selectedIds.includes(player.id) ? 'opacity-40 bg-gray-50' : 'bg-white border-gray-100 hover:border-yellow-500 active:scale-95'
+                    className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${selectedIds.includes(player.id) ? 'opacity-40 bg-gray-50 blur-[1px]' : 'bg-white border-gray-100 hover:border-yellow-500 active:scale-95'
                       }`}
                   >
                     <div className="flex items-center gap-3">
@@ -292,7 +295,14 @@ const PlayerSelectionModal = ({
                         <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{player.role}</p>
                       </div>
                     </div>
-                    {selectedIds.includes(player.id) && <CheckCircle2 size={20} className="text-gray-400" />}
+                    {selectedIds.includes(player.id) && (
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <span className="text-[10px] font-black uppercase tracking-widest">
+                          {dismissedSet.has(player.id) ? 'Out' : 'Selected'}
+                        </span>
+                        <CheckCircle2 size={20} />
+                      </div>
+                    )}
                   </button>
                 ))}
                 {filtered.length === 0 && (
@@ -518,6 +528,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [correctionMessage, setCorrectionMessage] = useState('');
   const [isCorrectionMenuOpen, setIsCorrectionMenuOpen] = useState(false);
+  const [pendingWicketExtra, setPendingWicketExtra] = useState<null | { type: 'wide' | 'no-ball'; runs: number }>(null);
   const [overEndNotice, setOverEndNotice] = useState<null | {
     overNumber: number;
     bowlerName: string;
@@ -578,6 +589,42 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     ballsBowled: 0,
     runsConceded: 0,
     wickets: 0,
+  });
+
+  const getDismissedBatterIds = (innings: number = match?.currentInnings || 1) => {
+    return new Set(
+      (match?.fallOfWickets || [])
+        .filter((entry) => entry.innings === innings)
+        .map((entry) => entry.player)
+        .filter(Boolean)
+    );
+  };
+
+  const getWicketsToAllOut = () => Math.max(0, battingPlayers.length - 1);
+
+  const isBattingSideAllOut = (wickets: number) => {
+    const wicketsToAllOut = getWicketsToAllOut();
+    return wicketsToAllOut > 0 && wickets >= wicketsToAllOut;
+  };
+
+  const isLegalDelivery = (isExtra: boolean, extraType?: string | null) => {
+    return !isExtra || extraType === 'bye' || extraType === 'leg-bye' || extraType === 'penalty';
+  };
+
+  const shouldRotateStrikeForCompletedRuns = (runs: number, extraType?: string | null) => {
+    return extraType !== 'penalty' && runs % 2 !== 0;
+  };
+
+  const buildSwapInningsPayload = () => ({
+    currentInnings: 2 as const,
+    isFreeHit: false,
+    recentBalls: [],
+    striker: null,
+    strikerName: null,
+    nonStriker: null,
+    nonStrikerName: null,
+    bowler: null,
+    bowlerName: null,
   });
 
   const openOverEndNotice = (overNumber: number, bowlerName: string, scoreline: string) => {
@@ -757,6 +804,11 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   const updateMatchPlayer = async (type: 'striker' | 'nonStriker' | 'bowler', playerId: string) => {
     if (!match) return;
     console.log(`Scorer: Updating ${type} to ${playerId}`);
+
+    if ((type === 'striker' || type === 'nonStriker') && getDismissedBatterIds().has(playerId)) {
+      alert('This batter is already out and cannot bat again.');
+      return;
+    }
 
     // Find player name
     const player = (type === 'bowler' ? bowlingPlayers : battingPlayers).find(p => p.id === playerId);
@@ -945,7 +997,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     let newOvers = currentScore.overs;
     let newExtras = currentScore.extras;
 
-    const isLegalBall = !isExtra || extraType === 'bye' || extraType === 'leg-bye';
+    const isLegalBall = isLegalDelivery(isExtra, extraType);
 
     if (isLegalBall) {
       newBalls += 1;
@@ -971,7 +1023,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
     if (strikerId) {
       const stats = { ...(playerStats[strikerId] || { runs: 0, balls: 0, fours: 0, sixes: 0, overs: 0, ballsBowled: 0, runsConceded: 0, wickets: 0 }) };
-      const facesBall = !isExtra || extraType === 'no-ball' || extraType === 'bye' || extraType === 'leg-bye';
+      const facesBall = isLegalBall;
       const getsRuns = !isExtra || extraType === 'no-ball';
 
       if (facesBall) stats.balls += 1;
@@ -1033,9 +1085,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     let newStriker: string | undefined = strikerId;
     let newNonStriker: string | undefined = nonStrikerId;
 
-    // Swap on odd runs (only if runs off bat)
-    const runsOffBat = !isExtra || extraType === 'no-ball';
-    if (runsOffBat && runs % 2 !== 0) {
+    if (shouldRotateStrikeForCompletedRuns(runs, extraType)) {
       [newStriker, newNonStriker] = [newNonStriker, newStriker];
     }
 
@@ -1088,15 +1138,17 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           },
           status: isMatchOver ? 'completed' : 'live',
           isFreeHit: (isInningsOver || isMatchOver) ? false : nextIsFreeHit,
-          currentInnings: isInningsOver ? 2 : match.currentInnings,
+          ...(isInningsOver ? buildSwapInningsPayload() : {
+            currentInnings: match.currentInnings,
+            striker: newStriker || null,
+            strikerName: newStriker === strikerId ? (match.strikerName || null) : (newStriker === nonStrikerId ? (match.nonStrikerName || null) : null),
+            nonStriker: newNonStriker || null,
+            nonStrikerName: newNonStriker === nonStrikerId ? (match.nonStrikerName || null) : (newNonStriker === strikerId ? (match.strikerName || null) : null),
+            bowler: bowlerId || null,
+            bowlerName: match.bowlerName || null,
+          }),
           playerStats,
-          recentBalls,
-          striker: newStriker || null,
-          strikerName: newStriker === strikerId ? (match.strikerName || null) : (newStriker === nonStrikerId ? (match.nonStrikerName || null) : null),
-          nonStriker: newNonStriker || null,
-          nonStrikerName: newNonStriker === nonStrikerId ? (match.nonStrikerName || null) : (newNonStriker === strikerId ? (match.strikerName || null) : null),
-          bowler: isInningsOver ? null : (bowlerId || null),
-          bowlerName: isInningsOver ? null : (match.bowlerName || null),
+          recentBalls: isInningsOver ? [] : recentBalls,
         },
       });
 
@@ -1135,7 +1187,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     }
   };
 
-  const handleWicket = async (type: string = 'bowled', fielderId?: string) => {
+  const handleWicket = async (type: string = 'bowled', fielderId?: string, extraType?: 'wide' | 'no-ball', extraRuns: number = 0) => {
     if (!match) return;
 
     if (!match.striker || !match.bowler) {
@@ -1152,11 +1204,15 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       return;
     }
 
+    const isExtraWicket = Boolean(extraType);
+    const extraTotal = extraType ? extraRuns + 1 : 0;
     const newWickets = currentScore.wickets + 1;
-    const isLegalBall = type !== 'retired-hurt'; // Retired hurt doesn't count as a ball in some formats, but usually it's not a wicket either. Let's assume it's a wicket for simplicity.
+    const isLegalBall = type !== 'retired-hurt' && !isExtraWicket;
 
     let newBalls = currentScore.balls;
     let newOvers = currentScore.overs;
+    let newRuns = currentScore.runs + extraTotal;
+    let newExtras = currentScore.extras + extraTotal;
 
     if (isLegalBall) {
       newBalls += 1;
@@ -1166,7 +1222,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       }
     }
 
-    const isAllOut = newWickets === 10;
+    const isAllOut = isBattingSideAllOut(newWickets);
     const isMatchOver = match.currentInnings === 2 && (isAllOut || (newOvers === match.overs && newBalls === 0));
     const isInningsOver = match.currentInnings === 1 && (isAllOut || (newOvers === match.overs && newBalls === 0));
 
@@ -1187,10 +1243,15 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     if (strikerId) {
       const stats = { ...(playerStats[strikerId] || { runs: 0, balls: 0, fours: 0, sixes: 0, overs: 0, ballsBowled: 0, runsConceded: 0, wickets: 0 }) };
       if (isLegalBall) stats.balls += 1;
+      if (extraType === 'no-ball') {
+        stats.runs += extraRuns;
+        if (extraRuns === 4) stats.fours += 1;
+        if (extraRuns === 6) stats.sixes += 1;
+      }
       playerStats[strikerId] = stats;
     }
 
-    if (bowlerId && type !== 'run-out' && type !== 'retired-hurt') {
+    if (bowlerId) {
       const stats = { ...(playerStats[bowlerId] || { runs: 0, balls: 0, fours: 0, sixes: 0, overs: 0, ballsBowled: 0, runsConceded: 0, wickets: 0 }) };
       if (isLegalBall) {
         stats.ballsBowled += 1;
@@ -1199,7 +1260,11 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           stats.ballsBowled = 0;
         }
       }
-      stats.wickets += 1;
+      if (extraType) {
+        stats.runsConceded += extraTotal;
+      }
+      const isBowlerWicket = type !== 'run-out' && type !== 'retired-hurt';
+      if (isBowlerWicket) stats.wickets += 1;
       playerStats[bowlerId] = stats;
 
       // Milestone Check for Bowler
@@ -1217,11 +1282,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         }
       };
 
-      checkWicketMilestone(3);
-      checkWicketMilestone(4);
-      checkWicketMilestone(5);
-      checkWicketMilestone(6);
-      checkWicketMilestone(7);
+      if (isBowlerWicket) {
+        checkWicketMilestone(3);
+        checkWicketMilestone(4);
+        checkWicketMilestone(5);
+        checkWicketMilestone(6);
+        checkWicketMilestone(7);
+      }
     }
 
     const fallOfWickets = [...(match.fallOfWickets || [])];
@@ -1234,7 +1301,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         bowlerName: bowlerName || undefined,
         fielder: fielderId || null,
         fielderName: fielderName || undefined,
-        score: currentScore.runs,
+        score: newRuns,
         balls: currentScore.balls + (currentScore.overs * 6),
         innings: match.currentInnings
       });
@@ -1242,13 +1309,34 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
     const recentBalls = [...(match.recentBalls || [])];
     recentBalls.push({
-      runs: 0,
+      runs: extraRuns,
+      isExtra: isExtraWicket,
+      extraType: extraType || null,
       isWicket: true,
       wicketType: type,
       wicketFielderName: fielderName,
       freeHit: isCurrentBallFreeHit,
     });
     if (recentBalls.length > 12) recentBalls.shift();
+
+    let nextStriker: string | null = null;
+    let nextNonStriker: string | null = match.nonStriker || null;
+    let nextStrikerName: string | null = null;
+    let nextNonStrikerName: string | null = match.nonStrikerName || null;
+
+    if (!isInningsOver) {
+      if (isLegalBall && newBalls === 0) {
+        nextStriker = match.nonStriker || null;
+        nextStrikerName = match.nonStrikerName || null;
+        nextNonStriker = null;
+        nextNonStrikerName = null;
+      } else if (shouldRotateStrikeForCompletedRuns(extraRuns, extraType)) {
+        nextStriker = match.nonStriker || null;
+        nextStrikerName = match.nonStrikerName || null;
+        nextNonStriker = null;
+        nextNonStrikerName = null;
+      }
+    }
 
     try {
       setCorrectionMessage('');
@@ -1258,22 +1346,26 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         payload: {
           [currentScoreKey]: {
             ...currentScore,
+            runs: newRuns,
             wickets: newWickets,
             balls: newBalls,
             overs: newOvers,
+            extras: newExtras,
           },
           status: isMatchOver ? 'completed' : 'live',
           isFreeHit: (isInningsOver || isMatchOver) ? false : (isLegalBall ? false : isCurrentBallFreeHit),
-          currentInnings: isInningsOver ? 2 : match.currentInnings,
+          ...(isInningsOver ? buildSwapInningsPayload() : {
+            currentInnings: match.currentInnings,
+            striker: nextStriker,
+            strikerName: nextStrikerName,
+            nonStriker: nextNonStriker,
+            nonStrikerName: nextNonStrikerName,
+            bowler: isLegalBall && newBalls === 0 ? null : (match.bowler || null),
+            bowlerName: isLegalBall && newBalls === 0 ? null : (match.bowlerName || null),
+          }),
           playerStats,
           fallOfWickets,
-          recentBalls,
-          striker: null,
-          strikerName: null,
-          nonStriker: isInningsOver ? null : (match.nonStriker || null),
-          nonStrikerName: isInningsOver ? null : (match.nonStrikerName || null),
-          bowler: isInningsOver ? null : (match.bowler || null),
-          bowlerName: isInningsOver ? null : (match.bowlerName || null),
+          recentBalls: isInningsOver ? [] : recentBalls,
         },
       });
 
@@ -1284,7 +1376,8 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           innings: match.currentInnings,
           over: newBalls === 0 && isLegalBall ? newOvers - 1 : newOvers,
           ball: newBalls === 0 && isLegalBall ? 6 : newBalls,
-          runs: 0,
+          runs: extraRuns,
+          extraType: extraType || null,
           wicket: {
             type,
             player: strikerId || null,
@@ -1301,15 +1394,15 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
       if (isInningsOver) {
         openInningsChangeNotice(
-          `${currentScore.runs}-${newWickets}`,
+          `${newRuns}-${newWickets}`,
           isAllOut ? 'all-out' : 'overs-complete',
-          currentScore.runs + 1
+          newRuns + 1
         );
         return;
       }
 
       if (isLegalBall && newBalls === 0 && !isInningsOver && !isMatchOver) {
-        openOverEndNotice(newOvers, match.bowlerName || 'Current Bowler', `${currentScore.runs}-${newWickets}`);
+        openOverEndNotice(newOvers, match.bowlerName || 'Current Bowler', `${newRuns}-${newWickets}`);
       }
     } catch (error) {
       console.error('Error recording wicket:', error);
@@ -1560,6 +1653,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   const striker = battingPlayers.find(p => p.id === match.striker);
   const nonStriker = battingPlayers.find(p => p.id === match.nonStriker);
   const bowler = bowlingPlayers.find(p => p.id === match.bowler);
+  const dismissedBatterIds = getDismissedBatterIds();
 
   const strikerStats = match.playerStats?.[match.striker || ''] || { runs: 0, balls: 0 };
   const nonStrikerStats = match.playerStats?.[match.nonStriker || ''] || { runs: 0, balls: 0 };
@@ -1573,7 +1667,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         title={selectionType === 'bowler' ? 'Select Bowler' : 'Select Batsman'}
         players={selectionType === 'bowler' ? bowlingPlayers : battingPlayers}
         onSelect={(id) => selectionType && updateMatchPlayer(selectionType, id)}
-        selectedIds={selectionType === 'striker' ? [match.nonStriker || ''] : selectionType === 'nonStriker' ? [match.striker || ''] : []}
+        selectedIds={selectionType === 'bowler'
+          ? []
+          : Array.from(new Set([
+            ...Array.from(dismissedBatterIds),
+            selectionType === 'striker' ? (match.nonStriker || '') : (match.striker || ''),
+          ].filter(Boolean)))}
+        dismissedIds={Array.from(dismissedBatterIds)}
         onAddPlayer={handleQuickAddPlayer}
         onFindPlayerByContact={handleFindPlayerByContact}
         onSearchPlayersByContact={handleSearchPlayersByContact}
@@ -1581,8 +1681,14 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       />
       <WicketModal
         isOpen={isWicketModalOpen}
-        onClose={() => setIsWicketModalOpen(false)}
-        onSelect={handleWicket}
+        onClose={() => {
+          setIsWicketModalOpen(false);
+          setPendingWicketExtra(null);
+        }}
+        onSelect={(type, fielderId) => {
+          handleWicket(type, fielderId, pendingWicketExtra?.type, pendingWicketExtra?.runs || 0);
+          setPendingWicketExtra(null);
+        }}
         players={bowlingPlayers}
       />
       <ExtrasModal
@@ -2076,6 +2182,21 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                       className="h-12 bg-white rounded-xl font-black text-lg shadow-sm border-b-2 border-gray-200 active:scale-90 transition-all"
                     >
                       {run}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                  {(extraMode === 'no-ball' ? [0, 1, 2, 3, 4, 5, 6] : [0, 1, 2, 3, 4]).map(run => (
+                    <button
+                      key={`wicket-${run}`}
+                      onClick={() => {
+                        setPendingWicketExtra({ type: extraMode, runs: run });
+                        setIsWicketModalOpen(true);
+                        setExtraMode(null);
+                      }}
+                      className="h-11 rounded-xl border border-red-100 bg-red-50 text-xs font-black text-red-600 shadow-sm active:scale-90 transition-all"
+                    >
+                      W+{run}
                     </button>
                   ))}
                 </div>

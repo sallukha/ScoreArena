@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, doc, query, collection, where, onSnapshot, handleFirestoreError, OperationType, limit, auth } from '../firebase';
+import { db, doc, query, collection, where, onSnapshot, getDocs, handleFirestoreError, OperationType, limit, auth } from '../firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Users, UserPlus, ArrowLeft, Search, X, ChevronRight, Trophy, Shield, Link2, Trash2 } from 'lucide-react';
 import { Team, Player } from '../types';
@@ -34,17 +34,22 @@ export const TeamDetails = ({ teamId, onBack, onPlayerClick }: TeamDetailsProps)
   const captain = teamPlayers.find((player) => player.id === team?.captainId);
 
   useEffect(() => {
-    const unsubTeam = onSnapshot(doc(db, 'teams', teamId), (docSnap) => {
+    const unsubTeam = onSnapshot(doc(db, 'teams', teamId), async (docSnap) => {
       if (docSnap.exists()) {
         const teamData = { id: docSnap.id, ...docSnap.data() } as Team;
         setTeam(teamData);
 
-        // Fetch players in this team
-        if (teamData.players && teamData.players.length > 0) {
-          const q = query(collection(db, 'players'), where('__name__', 'in', teamData.players));
-          onSnapshot(q, (playerSnap) => {
-            setTeamPlayers(playerSnap.docs.map(d => ({ id: d.id, ...d.data() } as Player)));
-          });
+        const playerIds = Array.from(new Set((teamData.players || []).filter(Boolean).map(String)));
+        if (playerIds.length > 0) {
+          const loadedPlayers: Player[] = [];
+          for (let index = 0; index < playerIds.length; index += 10) {
+            const chunk = playerIds.slice(index, index + 10);
+            const playerSnap = await getDocs(query(collection(db, 'players'), where('__name__', 'in', chunk)));
+            loadedPlayers.push(...playerSnap.docs.map(d => ({ id: d.id, ...d.data() } as Player)));
+          }
+
+          const playersById = new Map(loadedPlayers.map((player) => [player.id, player]));
+          setTeamPlayers(playerIds.map((id) => playersById.get(id)).filter(Boolean) as Player[]);
         } else {
           setTeamPlayers([]);
         }
