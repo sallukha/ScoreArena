@@ -5,6 +5,12 @@ export interface UserProfile {
   phoneNumber?: string;
   photoURL?: string;
   role: 'user' | 'admin';
+  battingStyle?: string;
+  bowlingStyle?: string;
+  handedness?: 'Right-handed' | 'Left-handed';
+  playerRole?: Player['role'];
+  jerseyNumber?: string;
+  playerType?: string;
 }
 
 export interface Player {
@@ -15,6 +21,9 @@ export interface Player {
   role: 'Batsman' | 'Bowler' | 'All-rounder' | 'Wicket-keeper';
   battingStyle?: string;
   bowlingStyle?: string;
+  handedness?: 'Right-handed' | 'Left-handed';
+  jerseyNumber?: string;
+  playerType?: string;
   createdBy: string;
   scope?: 'general' | 'tournament';
   tournamentId?: string;

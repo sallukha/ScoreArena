@@ -4,6 +4,7 @@ import { ArrowLeft, Users, ChevronRight, Search, CheckCircle2, Link2, Trophy } f
 import { Player } from '../types';
 import { findPlayersByContact, searchPlayersByContact } from '../utils/playerLookup';
 import { useCreateTeamMutation } from '../features/teams/hooks/useTeamMutations';
+import { useCreatePlayerMutation } from '../features/players/hooks/usePlayerMutations';
 
 export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
   const [name, setName] = useState('');
@@ -16,7 +17,20 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
   const [linkedSearchPlayer, setLinkedSearchPlayer] = useState<Player | null>(null);
   const [contactSuggestions, setContactSuggestions] = useState<Player[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [isQuickAdding, setIsQuickAdding] = useState(false);
+  const [quickName, setQuickName] = useState('');
+  const [quickContact, setQuickContact] = useState('');
+  const [quickAddMessage, setQuickAddMessage] = useState('');
   const createTeamMutation = useCreateTeamMutation();
+  const createPlayerMutation = useCreatePlayerMutation();
+
+  const mergePlayers = (players: Player[]) => {
+    setAllPlayers((prev) => {
+      const byId = new Map(prev.map((player) => [player.id, player]));
+      players.forEach((player) => byId.set(player.id, player));
+      return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+    });
+  };
 
   useEffect(() => {
     const fetchPlayers = async () => {
@@ -45,11 +59,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
       setLinkedSearchPlayer(nonTournamentPlayers[0] || null);
 
       // Merge with existing players, avoiding duplicates
-      setAllPlayers(prev => {
-        const existingIds = new Set(prev.map(p => p.id));
-        const newPlayers = nonTournamentPlayers.filter(p => !existingIds.has(p.id));
-        return [...prev, ...newPlayers];
-      });
+      mergePlayers(nonTournamentPlayers);
     } catch (error) {
       console.error('Error searching global players:', error);
       setLinkedSearchPlayer(null);
@@ -91,6 +101,78 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
       }
       return next;
     });
+  };
+
+  const handleQuickAddPlayer = async () => {
+    if (!auth.currentUser || !quickName.trim()) return;
+
+    setLoading(true);
+    setQuickAddMessage('');
+    try {
+      const contactValue = quickContact.trim();
+      if (contactValue) {
+        const existingPlayers = await findPlayersByContact(contactValue);
+        const existingPlayer = existingPlayers.find((player) => player.scope !== 'tournament');
+        if (existingPlayer) {
+          mergePlayers([existingPlayer]);
+          setSelectedPlayers((prev) => Array.from(new Set([...prev, existingPlayer.id])));
+          setQuickAddMessage('Existing profile added with saved details.');
+          setIsQuickAdding(false);
+          setQuickName('');
+          setQuickContact('');
+          return;
+        }
+      }
+
+      const snap = await getDocs(query(collection(db, 'players'), where('createdBy', '==', auth.currentUser.uid)));
+      const duplicate = snap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() } as Player))
+        .find((player) => player.scope !== 'tournament' && player.name.trim().toLowerCase() === quickName.trim().toLowerCase());
+
+      if (duplicate) {
+        mergePlayers([duplicate]);
+        setSelectedPlayers((prev) => Array.from(new Set([...prev, duplicate.id])));
+        setQuickAddMessage('Duplicate avoided. Existing player selected.');
+        setIsQuickAdding(false);
+        return;
+      }
+
+      const playerId = await createPlayerMutation.mutateAsync({
+        name: quickName.trim(),
+        email: contactValue.includes('@') ? contactValue.toLowerCase() : null,
+        phoneNumber: contactValue && !contactValue.includes('@') ? contactValue.replace(/\D/g, '').slice(-10) : null,
+        role: 'All-rounder',
+        battingStyle: 'Right Hand Bat',
+        bowlingStyle: 'Right Arm Medium',
+        handedness: 'Right-handed',
+        playerType: 'Local Player',
+        createdBy: auth.currentUser.uid,
+        scope: 'general',
+      } as any);
+
+      const newPlayer = {
+        id: playerId,
+        name: quickName.trim(),
+        role: 'All-rounder',
+        battingStyle: 'Right Hand Bat',
+        bowlingStyle: 'Right Arm Medium',
+        handedness: 'Right-handed',
+        playerType: 'Local Player',
+        createdBy: auth.currentUser.uid,
+        scope: 'general',
+      } as Player;
+      mergePlayers([newPlayer]);
+      setSelectedPlayers((prev) => Array.from(new Set([...prev, playerId])));
+      setQuickName('');
+      setQuickContact('');
+      setIsQuickAdding(false);
+      setQuickAddMessage('Player created and selected.');
+    } catch (error) {
+      console.error('Error quick adding team player:', error);
+      handleFirestoreError(error, OperationType.CREATE, 'players');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,8 +229,44 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
         <div className="flex flex-col gap-4">
           <div className="flex justify-between items-center">
             <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Select Players ({selectedPlayers.length})</label>
-            <button type="button" className="text-yellow-600 text-xs font-bold uppercase tracking-tight">+ New Player</button>
+            <button
+              type="button"
+              onClick={() => setIsQuickAdding((value) => !value)}
+              className="text-yellow-600 text-xs font-bold uppercase tracking-tight"
+            >
+              {isQuickAdding ? 'Close' : '+ New Player'}
+            </button>
           </div>
+
+          {isQuickAdding && (
+            <div className="rounded-2xl border border-yellow-100 bg-yellow-50 p-4 flex flex-col gap-3">
+              <input
+                type="text"
+                value={quickName}
+                onChange={(e) => setQuickName(e.target.value)}
+                placeholder="Player name"
+                className="w-full bg-white border border-yellow-100 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all text-sm font-bold"
+              />
+              <input
+                type="text"
+                value={quickContact}
+                onChange={(e) => setQuickContact(e.target.value)}
+                placeholder="Phone or email (optional)"
+                className="w-full bg-white border border-yellow-100 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all text-sm font-medium"
+              />
+              <button
+                type="button"
+                onClick={handleQuickAddPlayer}
+                disabled={loading || !quickName.trim()}
+                className="w-full rounded-xl bg-black py-3 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50"
+              >
+                Create & Select
+              </button>
+            </div>
+          )}
+          {quickAddMessage && (
+            <p className="text-[10px] font-black uppercase tracking-widest text-green-600">{quickAddMessage}</p>
+          )}
 
           <div className="relative flex gap-2">
             <div className="relative flex-1">
@@ -184,6 +302,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
                   type="button"
                   onClick={() => {
                     setLinkedSearchPlayer(player);
+                    mergePlayers([player]);
                     if (!selectedPlayers.includes(player.id)) {
                       setSelectedPlayers((prev) => [...prev, player.id]);
                     }
@@ -259,6 +378,9 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
                     </div>
                     <p className="text-[10px] text-gray-400 font-bold mt-1">
                       {player.stats?.matches || 0} M | {player.stats?.runs || 0} R | {player.stats?.wickets || 0} W
+                    </p>
+                    <p className="text-[10px] text-gray-400 font-bold mt-1">
+                      {player.battingStyle || 'Batting not set'} | {player.bowlingStyle || 'Bowling not set'} | {player.handedness || 'Hand not set'}
                     </p>
                   </div>
                 </div>

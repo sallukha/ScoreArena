@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { auth, handleFirestoreError, OperationType } from '../firebase';
+import { auth, collection, db, getDocs, handleFirestoreError, OperationType, query, where } from '../firebase';
 import { ArrowLeft, User, ChevronRight, Link2, Trophy } from 'lucide-react';
 import { Player } from '../types';
 import { findPlayersByContact, normalizeEmail, normalizePhone } from '../utils/playerLookup';
@@ -12,6 +12,9 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
   const [role, setRole] = useState<Player['role']>('Batsman');
   const [battingStyle, setBattingStyle] = useState('Right Hand Bat');
   const [bowlingStyle, setBowlingStyle] = useState('Right Arm Fast');
+  const [handedness, setHandedness] = useState<'Right-handed' | 'Left-handed'>('Right-handed');
+  const [jerseyNumber, setJerseyNumber] = useState('');
+  const [playerType, setPlayerType] = useState('Local Player');
   const [loading, setLoading] = useState(false);
   const [linkedPlayer, setLinkedPlayer] = useState<Player | null>(null);
   const [isCheckingContact, setIsCheckingContact] = useState(false);
@@ -40,6 +43,9 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
         setRole(existingPlayer.role);
         setBattingStyle(existingPlayer.battingStyle || 'Right Hand Bat');
         setBowlingStyle(existingPlayer.bowlingStyle || 'Right Arm Fast');
+        setHandedness(existingPlayer.handedness || (existingPlayer.battingStyle?.toLowerCase().includes('left') ? 'Left-handed' : 'Right-handed'));
+        setJerseyNumber(existingPlayer.jerseyNumber || '');
+        setPlayerType(existingPlayer.playerType || 'Local Player');
         setInfoMessage('Existing player profile found. Stats and history will stay linked with this email/phone.');
       } else {
         setInfoMessage(null);
@@ -57,19 +63,43 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
 
     setLoading(true);
     try {
+      const normalizedEmail = normalizeEmail(email);
+      const normalizedPhone = normalizePhone(phoneNumber);
+
       if (linkedPlayer) {
         setInfoMessage('This player already exists globally. Use this phone number in team search to add the same profile with full stats.');
         onBack();
         return;
       }
 
+      if (normalizedEmail || normalizedPhone) {
+        const existingByContact = await findPlayersByContact(normalizedEmail || normalizedPhone);
+        if (existingByContact.some((player) => player.scope !== 'tournament')) {
+          setInfoMessage('Same phone/email se player already exists. Team search me contact use karke existing profile add karo.');
+          return;
+        }
+      } else {
+        const snap = await getDocs(query(collection(db, 'players'), where('createdBy', '==', auth.currentUser.uid)));
+        const duplicateByName = snap.docs.some((doc) => {
+          const player = doc.data() as Player;
+          return player.scope !== 'tournament' && player.name.trim().toLowerCase() === name.trim().toLowerCase();
+        });
+        if (duplicateByName) {
+          setInfoMessage('Is naam ka player already hai. Duplicate avoid karne ke liye existing player select karo.');
+          return;
+        }
+      }
+
       await createPlayerMutation.mutateAsync({
         name,
-        email: normalizeEmail(email) || null,
-        phoneNumber: normalizePhone(phoneNumber) || null,
+        email: normalizedEmail || null,
+        phoneNumber: normalizedPhone || null,
         role,
         battingStyle,
         bowlingStyle,
+        handedness,
+        jerseyNumber: jerseyNumber.trim(),
+        playerType,
         createdBy: auth.currentUser.uid,
         scope: 'general',
       });
@@ -157,6 +187,44 @@ export const CreatePlayer = ({ onBack }: { onBack: () => void }) => {
             <p className="text-xs font-bold text-blue-800">{infoMessage}</p>
           </div>
         )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Handedness</label>
+            <select
+              value={handedness}
+              onChange={(e) => setHandedness(e.target.value as 'Right-handed' | 'Left-handed')}
+              className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-medium appearance-none"
+            >
+              <option>Right-handed</option>
+              <option>Left-handed</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Jersey No.</label>
+            <input
+              type="text"
+              value={jerseyNumber}
+              onChange={(e) => setJerseyNumber(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+              placeholder="18"
+              className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-medium"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Player Type</label>
+          <select
+            value={playerType}
+            onChange={(e) => setPlayerType(e.target.value)}
+            className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 px-4 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all font-medium appearance-none"
+          >
+            <option>Local Player</option>
+            <option>Club Player</option>
+            <option>Guest Player</option>
+            <option>Professional</option>
+          </select>
+        </div>
 
         <div className="flex flex-col gap-2">
           <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Player Email (Optional)</label>

@@ -82,14 +82,43 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
         acc.matches += 1;
         acc.runs += playerMatch?.runs || 0;
         acc.wickets += playerMatch?.wickets || 0;
+        acc.balls += playerMatch?.balls || 0;
+        acc.ballsBowled += playerMatch?.ballsBowled || 0;
+        acc.runsConceded += playerMatch?.runsConceded || 0;
+        acc.highestScore = Math.max(acc.highestScore, playerMatch?.runs || 0);
         return acc;
-    }, { matches: 0, runs: 0, wickets: 0 });
+    }, { matches: 0, runs: 0, wickets: 0, balls: 0, ballsBowled: 0, runsConceded: 0, highestScore: 0 });
 
     const summary = {
         matches: linkedPlayer?.stats?.matches || aggregatedStats.matches,
         runs: linkedPlayer?.stats?.runs || aggregatedStats.runs,
         wickets: linkedPlayer?.stats?.wickets || aggregatedStats.wickets,
+        balls: linkedPlayer?.stats?.balls || aggregatedStats.balls,
+        ballsBowled: linkedPlayer?.stats?.ballsBowled || aggregatedStats.ballsBowled,
+        runsConceded: linkedPlayer?.stats?.runsConceded || aggregatedStats.runsConceded,
+        highestScore: linkedPlayer?.stats?.highestScore || aggregatedStats.highestScore,
+        fifties: linkedPlayer?.stats?.fifties || 0,
+        centuries: linkedPlayer?.stats?.centuries || 0,
     };
+    const battingAverage = summary.matches > 0 ? (summary.runs / summary.matches).toFixed(2) : '0.00';
+    const strikeRate = summary.balls > 0 ? ((summary.runs / summary.balls) * 100).toFixed(1) : '0.0';
+    const economyRate = summary.ballsBowled > 0 ? ((summary.runsConceded / summary.ballsBowled) * 6).toFixed(2) : '0.00';
+    const recentPerformances = playerMatches
+        .filter((match: any) => linkedPlayer ? Boolean(match.playerStats?.[linkedPlayer.id]) : true)
+        .slice(0, 5);
+    const teamHistory = Array.from(new Set(playerMatches.flatMap((match: any) => {
+        const ids = [];
+        if (!linkedPlayer || teams[match.teamA]?.players?.includes?.(linkedPlayer.id) || match.playerStats?.[linkedPlayer.id]) ids.push(match.teamA);
+        if (!linkedPlayer || teams[match.teamB]?.players?.includes?.(linkedPlayer.id)) ids.push(match.teamB);
+        return ids.map((id) => teams[id]?.name).filter(Boolean);
+    })));
+    const achievements = [
+        summary.matches >= 1 ? 'First match recorded' : '',
+        summary.highestScore >= 50 ? 'Half-century scorer' : '',
+        summary.highestScore >= 100 ? 'Century scorer' : '',
+        summary.wickets >= 5 ? 'Five-plus wickets' : '',
+        summary.runs >= 500 ? '500 career runs' : '',
+    ].filter(Boolean);
 
     return (
         <div className="p-4 pb-24 flex flex-col gap-6">
@@ -130,11 +159,68 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
 
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="text-lg font-black italic uppercase tracking-tighter text-gray-900">Full Match History</h3>
+                    <h3 className="text-lg font-black italic uppercase tracking-tighter text-gray-900">Cricket Dashboard</h3>
                     <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gray-400 mt-1">
-                        Logged-in user ke created aur linked player matches yahan dikhenge
+                        Complete stats, recent form, teams and achievements
                     </p>
                 </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                    ['Bat Avg', battingAverage],
+                    ['Strike Rate', strikeRate],
+                    ['Best Score', summary.highestScore],
+                    ['Economy', economyRate],
+                    ['Balls Faced', summary.balls],
+                    ['Balls Bowled', summary.ballsBowled],
+                    ['50s / 100s', `${summary.fifties}/${summary.centuries}`],
+                    ['Runs Given', summary.runsConceded],
+                ].map(([label, value]) => (
+                    <div key={label} className="bg-white rounded-2xl border border-gray-100 px-4 py-4 shadow-sm">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400">{label}</p>
+                        <p className="mt-2 text-2xl font-black italic text-gray-900">{value}</p>
+                    </div>
+                ))}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-400">Recent Performances</h4>
+                    <div className="mt-4 flex flex-col gap-3">
+                        {recentPerformances.length === 0 ? (
+                            <p className="text-sm font-bold text-gray-400">No recent performances yet.</p>
+                        ) : recentPerformances.map((match: any) => {
+                            const playerMatch = linkedPlayer ? match.playerStats?.[linkedPlayer.id] : null;
+                            return (
+                                <button key={`recent-${match.id}`} onClick={() => onMatchClick(match.id)} className="flex items-center justify-between gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-left">
+                                    <span className="text-sm font-black text-gray-900 truncate">{teams[match.teamA]?.name || 'Team A'} vs {teams[match.teamB]?.name || 'Team B'}</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-yellow-700">
+                                        {playerMatch ? `${playerMatch.runs || 0}R ${playerMatch.wickets || 0}W` : formatScore(match.currentInnings === 2 ? match.scoreB : match.scoreA)}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-400">Teams & Achievements</h4>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                        {(teamHistory.length ? teamHistory : ['No team history yet']).map((name) => (
+                            <span key={name} className="rounded-xl bg-yellow-50 border border-yellow-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-yellow-700">{name}</span>
+                        ))}
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2">
+                        {(achievements.length ? achievements : ['Start scoring matches to unlock achievements']).map((achievement) => (
+                            <div key={achievement} className="rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3 text-sm font-bold text-gray-700">{achievement}</div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h3 className="text-lg font-black italic uppercase tracking-tighter text-gray-900">Match History</h3>
             </div>
 
             {loadingHistory ? (

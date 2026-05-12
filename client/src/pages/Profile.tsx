@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LogOut, Pencil, Check, X } from 'lucide-react';
-import { db, doc, getDocs, setDoc, query, collection, where, limit } from '../firebase';
+import { db, doc, getDocs, setDoc, updateDoc, query, collection, where, limit } from '../firebase';
 import { optimizeProfileImage } from '../lib/imageUtils';
 import { useAuth } from '../contexts/AuthContext';
 import { StatBox } from '../components/ui/StatBox';
@@ -19,6 +19,17 @@ export const Profile = () => {
     const [displayNameInput, setDisplayNameInput] = useState('');
     const [isSavingName, setIsSavingName] = useState(false);
     const [nameMessage, setNameMessage] = useState('');
+    const [isEditingCricketProfile, setIsEditingCricketProfile] = useState(false);
+    const [isSavingCricketProfile, setIsSavingCricketProfile] = useState(false);
+    const [cricketProfileMessage, setCricketProfileMessage] = useState('');
+    const [cricketProfileInput, setCricketProfileInput] = useState({
+        battingStyle: 'Right Hand Bat',
+        bowlingStyle: 'Right Arm Medium',
+        handedness: 'Right-handed' as 'Right-handed' | 'Left-handed',
+        playerRole: 'All-rounder',
+        jerseyNumber: '',
+        playerType: 'Local Player',
+    });
 
     useEffect(() => {
         if (!user) return;
@@ -38,6 +49,17 @@ export const Profile = () => {
     useEffect(() => {
         setDisplayNameInput(user?.displayName || '');
     }, [user?.displayName]);
+
+    useEffect(() => {
+        setCricketProfileInput({
+            battingStyle: playerStats?.battingStyle || user?.battingStyle || 'Right Hand Bat',
+            bowlingStyle: playerStats?.bowlingStyle || user?.bowlingStyle || 'Right Arm Medium',
+            handedness: playerStats?.handedness || user?.handedness || 'Right-handed',
+            playerRole: playerStats?.role || user?.playerRole || 'All-rounder',
+            jerseyNumber: playerStats?.jerseyNumber || user?.jerseyNumber || '',
+            playerType: playerStats?.playerType || user?.playerType || 'Local Player',
+        });
+    }, [playerStats, user]);
 
     const handleLinkPhone = async () => {
         if (!user || !phoneInput || phoneInput.length < 10) return;
@@ -133,6 +155,53 @@ export const Profile = () => {
             setNameMessage('Name update nahi ho paaya.');
         } finally {
             setIsSavingName(false);
+        }
+    };
+
+    const handleSaveCricketProfile = async () => {
+        if (!user) return;
+
+        setIsSavingCricketProfile(true);
+        setCricketProfileMessage('');
+        try {
+            const payload = {
+                battingStyle: cricketProfileInput.battingStyle,
+                bowlingStyle: cricketProfileInput.bowlingStyle,
+                handedness: cricketProfileInput.handedness,
+                playerRole: cricketProfileInput.playerRole,
+                jerseyNumber: cricketProfileInput.jerseyNumber.trim(),
+                playerType: cricketProfileInput.playerType,
+            };
+
+            await updateDoc(doc(db, 'users', user.uid), payload);
+
+            if (playerStats?.id) {
+                await updateDoc(doc(db, 'players', playerStats.id), {
+                    battingStyle: payload.battingStyle,
+                    bowlingStyle: payload.bowlingStyle,
+                    handedness: payload.handedness,
+                    role: payload.playerRole,
+                    jerseyNumber: payload.jerseyNumber,
+                    playerType: payload.playerType,
+                });
+                setPlayerStats((prev: any) => prev ? {
+                    ...prev,
+                    battingStyle: payload.battingStyle,
+                    bowlingStyle: payload.bowlingStyle,
+                    handedness: payload.handedness,
+                    role: payload.playerRole,
+                    jerseyNumber: payload.jerseyNumber,
+                    playerType: payload.playerType,
+                } : prev);
+            }
+
+            setIsEditingCricketProfile(false);
+            setCricketProfileMessage('Cricket profile updated.');
+        } catch (error) {
+            console.error('Error saving cricket profile:', error);
+            setCricketProfileMessage('Cricket profile save nahi ho paaya.');
+        } finally {
+            setIsSavingCricketProfile(false);
         }
     };
 
@@ -265,6 +334,79 @@ export const Profile = () => {
             </div>
 
             <div className="p-4 flex flex-col gap-6">
+                <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm flex flex-col gap-4">
+                    <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
+                            <span className="w-1 h-4 bg-yellow-500 rounded-full"></span> Player Profile
+                        </h3>
+                        <button
+                            onClick={() => setIsEditingCricketProfile((value) => !value)}
+                            className="rounded-xl bg-yellow-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-yellow-700 border border-yellow-100"
+                        >
+                            {isEditingCricketProfile ? 'Close' : 'Edit'}
+                        </button>
+                    </div>
+
+                    {isEditingCricketProfile ? (
+                        <div className="grid grid-cols-1 gap-3">
+                            <select value={cricketProfileInput.battingStyle} onChange={(e) => setCricketProfileInput((prev) => ({ ...prev, battingStyle: e.target.value }))} className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 font-bold text-sm">
+                                <option>Right Hand Bat</option>
+                                <option>Left Hand Bat</option>
+                            </select>
+                            <select value={cricketProfileInput.bowlingStyle} onChange={(e) => setCricketProfileInput((prev) => ({ ...prev, bowlingStyle: e.target.value }))} className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 font-bold text-sm">
+                                <option>Right Arm Fast</option>
+                                <option>Right Arm Medium</option>
+                                <option>Right Arm Spin</option>
+                                <option>Left Arm Fast</option>
+                                <option>Left Arm Medium</option>
+                                <option>Left Arm Spin</option>
+                                <option>Does Not Bowl</option>
+                            </select>
+                            <div className="grid grid-cols-2 gap-3">
+                                <select value={cricketProfileInput.handedness} onChange={(e) => setCricketProfileInput((prev) => ({ ...prev, handedness: e.target.value as 'Right-handed' | 'Left-handed' }))} className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 font-bold text-sm">
+                                    <option>Right-handed</option>
+                                    <option>Left-handed</option>
+                                </select>
+                                <select value={cricketProfileInput.playerRole} onChange={(e) => setCricketProfileInput((prev) => ({ ...prev, playerRole: e.target.value }))} className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 font-bold text-sm">
+                                    <option>Batsman</option>
+                                    <option>Bowler</option>
+                                    <option>All-rounder</option>
+                                    <option>Wicket-keeper</option>
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <input value={cricketProfileInput.jerseyNumber} onChange={(e) => setCricketProfileInput((prev) => ({ ...prev, jerseyNumber: e.target.value.replace(/[^\d]/g, '').slice(0, 3) }))} placeholder="Jersey number" className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 font-bold text-sm" />
+                                <select value={cricketProfileInput.playerType} onChange={(e) => setCricketProfileInput((prev) => ({ ...prev, playerType: e.target.value }))} className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 font-bold text-sm">
+                                    <option>Local Player</option>
+                                    <option>Club Player</option>
+                                    <option>Guest Player</option>
+                                    <option>Professional</option>
+                                </select>
+                            </div>
+                            <button onClick={handleSaveCricketProfile} disabled={isSavingCricketProfile} className="w-full bg-black text-white py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50">
+                                {isSavingCricketProfile ? 'Saving...' : 'Save Cricket Profile'}
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3">
+                            {[
+                                ['Batting', cricketProfileInput.battingStyle],
+                                ['Bowling', cricketProfileInput.bowlingStyle],
+                                ['Hand', cricketProfileInput.handedness],
+                                ['Role', cricketProfileInput.playerRole],
+                                ['Jersey', cricketProfileInput.jerseyNumber || '--'],
+                                ['Type', cricketProfileInput.playerType],
+                            ].map(([label, value]) => (
+                                <div key={label} className="rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">{label}</p>
+                                    <p className="mt-1 text-sm font-black text-gray-900">{value}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {cricketProfileMessage && <p className="text-[10px] font-black uppercase tracking-widest text-green-600">{cricketProfileMessage}</p>}
+                </div>
+
                 <div className="flex flex-col gap-4">
                     <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
                         <span className="w-1 h-4 bg-yellow-500 rounded-full"></span> Batting Performance

@@ -122,6 +122,9 @@ export async function createPlayer(payload: {
   role: string;
   battingStyle?: string;
   bowlingStyle?: string;
+  handedness?: string;
+  jerseyNumber?: string;
+  playerType?: string;
   createdBy: string;
   scope?: "general" | "tournament";
   tournamentId?: string;
