@@ -138,6 +138,15 @@ export async function updateMatch(
   payload: Record<string, any>,
 ) {
   await updateDoc(doc(db, "matches", matchId), payload);
+
+  if (payload.status === "completed") {
+    await apiFetch(`/matches/${encodeURIComponent(matchId)}/finalize`, {
+      method: "POST",
+      body: JSON.stringify({
+        playerStats: payload.playerStats || {},
+      }),
+    });
+  }
 }
 
 export async function deleteMatch(matchId: string) {

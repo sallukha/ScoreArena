@@ -131,11 +131,22 @@ export async function createPlayer(payload: {
   stats?: Record<string, any>;
   createdAt?: any;
 }) {
-  const docRef = await addDoc(collection(db, "players"), {
-    ...payload,
-    createdAt: payload.createdAt ?? serverTimestamp(),
+  if (!payload.email && !payload.phoneNumber) {
+    const docRef = await addDoc(collection(db, "players"), {
+      ...payload,
+      createdAt: payload.createdAt ?? serverTimestamp(),
+    });
+    return docRef.id;
+  }
+
+  const result = await apiFetch<{ player: { id: string } }>("/players/resolve", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      phone: payload.phoneNumber,
+    }),
   });
-  return docRef.id;
+  return result.player.id;
 }
 
 export async function updatePlayer(

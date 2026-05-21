@@ -4,6 +4,8 @@ import { verifyAccessToken } from '../utils/jwt.js';
 type AuthenticatedUser = {
   uid: string;
   role: string;
+  email?: string;
+  phoneNumber?: string;
 };
 declare global {
   namespace Express {
@@ -31,6 +33,8 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     req.authUser = {
       uid: payload.sub,
       role: payload.role,
+      email: payload.email || '',
+      phoneNumber: payload.phoneNumber || '',
     };
     return next();
   } catch (error) {

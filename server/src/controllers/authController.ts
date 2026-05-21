@@ -101,8 +101,38 @@ function buildAuthResponse(doc: any) {
     token: createAccessToken({
       uid: user.uid,
       role: user.role || 'user',
+      email: user.email || '',
+      phoneNumber: user.phoneNumber || '',
     }),
   };
+}
+
+async function ensureLoginPlayer(user: any) {
+  const email = normalizeEmail(user?.email);
+  const phone = normalizePhone(user?.phoneNumber);
+
+  if (!email && !phone) {
+    return null;
+  }
+
+  try {
+    const { player } = await resolveOrCreatePlayer({
+      name: user?.displayName || email || phone || 'ScoreArena Player',
+      email,
+      phone,
+      createdBy: user?.uid || '',
+      scope: 'general',
+    });
+    return player;
+  } catch (error) {
+    logger.warn('Could not auto-link player profile during login', {
+      uid: user?.uid,
+      email,
+      phone,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 export async function getUser(req: Request, res: Response) {
@@ -143,6 +173,7 @@ export async function googleLogin(req: Request, res: Response) {
     { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
   );
 
+  await ensureLoginPlayer(sanitizeUser(user));
   return res.json({
     ...buildAuthResponse(user),
     isNewUser: !user?.createdAt || !user?.updatedAt,
@@ -205,6 +236,7 @@ export async function firebaseLogin(req: Request, res: Response) {
     );
 
     logger.info('User logged in via Firebase', { uid, authProvider });
+    await ensureLoginPlayer(sanitizeUser(user));
     return res.json(buildAuthResponse(user));
   } catch (error) {
     logger.error('Database error during firebase login', {

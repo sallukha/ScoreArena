@@ -1,11 +1,11 @@
 ﻿import { useState, useEffect } from 'react';
-import { db, doc, collection, onSnapshot, auth, getDoc, handleFirestoreError, OperationType, getDocs, query, where, orderBy, increment, limit } from '../firebase';
+import { db, doc, collection, onSnapshot, auth, getDoc, handleFirestoreError, OperationType, getDocs, query, where, orderBy, limit } from '../firebase';
 import { ArrowLeft, ChevronRight, User, Settings2, History, CheckCircle2, Search, RotateCcw, XCircle, AlertCircle, Trophy, Star, Target, Share2 } from 'lucide-react';
 import { Match, Team, Player } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { MilestonePoster } from './MilestonePoster';
 import { useCreateMatchBallMutation, useDeleteMatchBallMutation, useUpdateMatchMutation } from '../features/matches/hooks/useMatchMutations';
-import { useCreatePlayerMutation, useUpdatePlayerMutation } from '../features/players/hooks/usePlayerMutations';
+import { useCreatePlayerMutation } from '../features/players/hooks/usePlayerMutations';
 import { useUpdateTeamMutation } from '../features/teams/hooks/useTeamMutations';
 import { useAuth } from '../contexts/AuthContext';
 import { findPlayersByContact, normalizeEmail, normalizePhone, searchPlayersByContact } from '../utils/playerLookup';
@@ -578,7 +578,6 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   const createMatchBallMutation = useCreateMatchBallMutation();
   const deleteMatchBallMutation = useDeleteMatchBallMutation();
   const createPlayerMutation = useCreatePlayerMutation();
-  const updatePlayerMutation = useUpdatePlayerMutation();
   const updateTeamMutation = useUpdateTeamMutation();
 
   const handleShareLiveScore = async () => {
@@ -962,73 +961,6 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     } catch (error) {
       console.error('Error quick adding player:', error);
       handleFirestoreError(error, OperationType.CREATE, 'players');
-    }
-  };
-
-  useEffect(() => {
-    if (match?.status === 'completed') {
-      finalizeMatchStats();
-    }
-  }, [match?.status]);
-
-  const finalizeMatchStats = async () => {
-    if (!match || match.status !== 'completed' || (match as any).statsFinalized) return;
-
-    const playerStats = match.playerStats || {};
-    const playerIds = Object.keys(playerStats);
-
-    try {
-      for (const playerId of playerIds) {
-        const stats = playerStats[playerId];
-        const playerRef = doc(db, 'players', playerId);
-
-        // Fetch current player to update highest score
-        const playerSnap = await getDoc(playerRef);
-        const currentStats = playerSnap.exists() ? (playerSnap.data().stats || {}) : {};
-
-        const newRuns = (currentStats.runs || 0) + (stats.runs || 0);
-        const newMatches = (currentStats.matches || 0) + 1;
-        const newBalls = (currentStats.balls || 0) + (stats.balls || 0);
-        const newWickets = (currentStats.wickets || 0) + (stats.wickets || 0);
-        const newBallsBowled = (currentStats.ballsBowled || 0) + (stats.ballsBowled || 0);
-        const newRunsConceded = (currentStats.runsConceded || 0) + (stats.runsConceded || 0);
-
-        const average = newMatches > 0 ? (newRuns / newMatches) : 0;
-        const strikeRate = newBalls > 0 ? ((newRuns / newBalls) * 100) : 0;
-        const economy = newBallsBowled > 0 ? ((newRunsConceded / newBallsBowled) * 6) : 0;
-
-        const isFifty = stats.runs >= 50 && stats.runs < 100;
-        const isCentury = stats.runs >= 100;
-
-        await updatePlayerMutation.mutateAsync({
-          playerId,
-          payload: {
-            'stats.matches': newMatches,
-            'stats.runs': newRuns,
-            'stats.wickets': newWickets,
-            'stats.fours': increment(stats.fours || 0),
-            'stats.sixes': increment(stats.sixes || 0),
-            'stats.fifties': increment(isFifty ? 1 : 0),
-            'stats.centuries': increment(isCentury ? 1 : 0),
-            'stats.balls': newBalls,
-            'stats.ballsBowled': newBallsBowled,
-            'stats.runsConceded': newRunsConceded,
-            'stats.average': average,
-            'stats.strikeRate': strikeRate,
-            'stats.economy': economy,
-            'stats.highestScore': Math.max(currentStats.highestScore || 0, stats.runs || 0),
-          },
-        });
-      }
-
-      await updateMatchMutation.mutateAsync({
-        matchId,
-        payload: {
-          statsFinalized: true,
-        },
-      });
-    } catch (error) {
-      console.error('Error finalizing match stats:', error);
     }
   };
 

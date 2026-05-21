@@ -32,12 +32,16 @@ export function subscribeTeamsByPlayer(
 export async function createTeam(payload: {
   name: string;
   players: string[];
-  captainId: string;
+  captainId?: string | null;
   createdBy: string;
   scope?: "general" | "tournament";
   tournamentId?: string;
 }) {
-  const docRef = await addDoc(collection(db, "teams"), payload);
+  const docRef = await addDoc(collection(db, "teams"), {
+    ...payload,
+    captainId: payload.captainId || null,
+    players: Array.from(new Set((payload.players || []).filter(Boolean))),
+  });
   return docRef.id;
 }
 

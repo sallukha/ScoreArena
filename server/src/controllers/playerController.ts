@@ -1,11 +1,22 @@
 import type { Request, Response } from 'express';
 import MatchModel from '../models/Match.js';
 import PlayerModel from '../models/Player.js';
+import { rebuildAllPlayerStats } from '../utils/matchStats.js';
 import { escapeRegex, findPlayerByIdentifiers, resolveOrCreatePlayer, sanitizePlayer } from '../utils/playerAuth.js';
 
 export async function resolvePlayer(req: Request, res: Response) {
-  const { phone, email, name } = req.body || {};
-  const { player, existed } = await resolveOrCreatePlayer({ phone, email, name });
+  const { phone, phoneNumber, email, name, role, battingStyle, bowlingStyle, scope, tournamentId } = req.body || {};
+  const { player, existed } = await resolveOrCreatePlayer({
+    phone: phone || phoneNumber,
+    email,
+    name,
+    role,
+    battingStyle,
+    bowlingStyle,
+    createdBy: req.body?.createdBy || req.authUser?.uid || '',
+    scope,
+    tournamentId,
+  });
   return res.status(existed ? 200 : 201).json({ existed, player: sanitizePlayer(player) });
 }
 
@@ -34,10 +45,16 @@ export async function searchPlayers(req: Request, res: Response) {
 }
 
 export async function getPlayerHistory(req: Request, res: Response) {
-  const player = await findPlayerByIdentifiers({
-    phone: String(req.query.phone || ''),
-    email: String(req.query.email || ''),
+  const queryPhone = String(req.query.phone || req.query.phoneNumber || req.authUser?.phoneNumber || '');
+  const queryEmail = String(req.query.email || req.authUser?.email || '');
+  let player = await findPlayerByIdentifiers({
+    phone: queryPhone,
+    email: queryEmail,
   });
+
+  if (!player && req.authUser?.uid?.match(/^[a-f\d]{24}$/i)) {
+    player = await PlayerModel.findById(req.authUser.uid);
+  }
 
   if (!player) {
     return res.status(404).json({ error: 'Player not found' });
@@ -85,4 +102,9 @@ export async function getPlayerHistory(req: Request, res: Response) {
       ...match.performance,
     })),
   });
+}
+
+export async function rebuildPlayerStats(_req: Request, res: Response) {
+  const result = await rebuildAllPlayerStats();
+  return res.json({ success: true, ...result });
 }

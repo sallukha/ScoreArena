@@ -32,7 +32,15 @@ export function sanitizePlayer(doc: any) {
     id: String(value._id),
     name: value.name || '',
     phone: value.phone || null,
+    phoneNumber: value.phoneNumber || value.phone || null,
     email: value.email || null,
+    role: value.role || 'All-rounder',
+    battingStyle: value.battingStyle || 'Right Hand Bat',
+    bowlingStyle: value.bowlingStyle || 'Right Arm Fast',
+    createdBy: value.createdBy || '',
+    scope: value.scope || 'general',
+    tournamentId: value.tournamentId || '',
+    stats: value.stats || {},
     matchesPlayed: Number(value.matchesPlayed || 0),
     totalRuns: Number(value.totalRuns || 0),
     totalWickets: Number(value.totalWickets || 0),
@@ -46,6 +54,8 @@ export function createPlayerTokenPayload(player: any) {
   return {
     uid: String(player._id || player.id),
     role: 'user',
+    email: player.email || '',
+    phoneNumber: player.phoneNumber || player.phone || '',
   };
 }
 
@@ -127,11 +137,23 @@ export async function resolveOrCreatePlayer(input: {
   email?: string | null;
   name?: string | null;
   passwordHash?: string | null;
+  role?: string | null;
+  battingStyle?: string | null;
+  bowlingStyle?: string | null;
+  createdBy?: string | null;
+  scope?: string | null;
+  tournamentId?: string | null;
 }) {
   const phone = normalizePhone(input.phone);
   const email = normalizeEmail(input.email);
   const name = String(input.name || '').trim();
   const passwordHash = input.passwordHash || null;
+  const role = String(input.role || '').trim();
+  const battingStyle = String(input.battingStyle || '').trim();
+  const bowlingStyle = String(input.bowlingStyle || '').trim();
+  const createdBy = String(input.createdBy || '').trim();
+  const scope = input.scope === 'tournament' ? 'tournament' : input.scope === 'general' ? 'general' : '';
+  const tournamentId = String(input.tournamentId || '').trim();
 
   if (!phone && !email) {
     const error = new Error('Phone or email is required');
@@ -144,12 +166,19 @@ export async function resolveOrCreatePlayer(input: {
     const update: Record<string, any> = {};
 
     if (phone && !existing.phone) update.phone = phone;
+    if (phone && !existing.phoneNumber) update.phoneNumber = phone;
     if (email && !existing.email) update.email = email;
     if (name && !existing.name) update.name = name;
     if (passwordHash && email) update.password = passwordHash;
+    if (role) update.role = role;
+    if (battingStyle) update.battingStyle = battingStyle;
+    if (bowlingStyle) update.bowlingStyle = bowlingStyle;
+    if (createdBy && !existing.createdBy) update.createdBy = createdBy;
+    if (scope) update.scope = scope;
+    if (tournamentId) update.tournamentId = tournamentId;
 
     if (Object.keys(update).length > 0) {
-      await existing.updateOne(update);
+      await existing.updateOne({ $set: update });
       Object.assign(existing, update);
     }
 
@@ -159,8 +188,15 @@ export async function resolveOrCreatePlayer(input: {
   const player = await PlayerModel.create({
     name,
     phone,
+    phoneNumber: phone,
     email,
     password: passwordHash,
+    role: role || undefined,
+    battingStyle: battingStyle || undefined,
+    bowlingStyle: bowlingStyle || undefined,
+    createdBy,
+    scope: scope || 'general',
+    tournamentId,
   });
 
   return { player, existed: false };

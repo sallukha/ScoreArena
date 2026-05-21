@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import MatchModel from '../models/Match.js';
-import PlayerModel from '../models/Player.js';
 import mongoose from 'mongoose';
+import { buildPerformancesFromPlayerStats, finalizeMatchStats } from '../utils/matchStats.js';
 
 function normalizePerformance(entry: any) {
   return {
@@ -13,49 +13,10 @@ function normalizePerformance(entry: any) {
   };
 }
 
-async function finalizeMatchStats(match: any) {
-  if (match.statsFinalized) {
-    return match;
-  }
-
-  const totalsByPlayer = new Map<string, { matchesPlayed: number; totalRuns: number; totalWickets: number }>();
-
-  for (const performance of match.performances || []) {
-    const playerId = String(performance.playerId);
-    const current = totalsByPlayer.get(playerId) || {
-      matchesPlayed: 0,
-      totalRuns: 0,
-      totalWickets: 0,
-    };
-
-    current.matchesPlayed = 1;
-    current.totalRuns += Number(performance.runs || 0);
-    current.totalWickets += Number(performance.wickets || 0);
-    totalsByPlayer.set(playerId, current);
-  }
-
-  for (const [playerId, totals] of totalsByPlayer.entries()) {
-    await PlayerModel.updateOne(
-      { _id: playerId },
-      {
-        $inc: {
-          matchesPlayed: totals.matchesPlayed,
-          totalRuns: totals.totalRuns,
-          totalWickets: totals.totalWickets,
-        },
-      }
-    );
-  }
-
-  match.statsFinalized = true;
-  await match.save();
-  return match;
-}
-
 export async function createMatch(req: Request, res: Response) {
   const performances = Array.isArray(req.body?.performances)
     ? req.body.performances.map(normalizePerformance)
-    : [];
+    : buildPerformancesFromPlayerStats(req.body?.playerStats || {}).map(normalizePerformance);
   const players = Array.from(
     new Set(
       (Array.isArray(req.body?.players) ? req.body.players : performances.map((entry: any) => entry.playerId))
@@ -112,6 +73,16 @@ export async function finalizeMatch(req: Request, res: Response) {
     match.players = Array.from(
       new Set(match.performances.map((entry: any) => String(entry.playerId)).filter(Boolean))
     ) as any;
+  }
+
+  if (req.body?.playerStats) {
+    match.playerStats = req.body.playerStats;
+    if (!Array.isArray(match.performances) || match.performances.length === 0) {
+      match.performances = buildPerformancesFromPlayerStats(match.playerStats).map(normalizePerformance);
+      match.players = Array.from(
+        new Set(match.performances.map((entry: any) => String(entry.playerId)).filter(Boolean))
+      ) as any;
+    }
   }
 
   if (req.body?.matchDate) {

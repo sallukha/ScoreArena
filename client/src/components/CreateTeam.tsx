@@ -185,7 +185,7 @@ export const CreateTeam = ({ onBack }: { onBack: () => void }) => {
       await createTeamMutation.mutateAsync({
         name,
         players: uniqueSelectedPlayers,
-        captainId: captainId || '',
+        captainId: captainId || null,
         createdBy: auth.currentUser.uid,
         scope: 'general',
       });

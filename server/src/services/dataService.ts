@@ -1,5 +1,7 @@
 import { getPathMeta } from '../utils/pathResolver.js';
 import { applyPatchedUpdate, normalizePayload } from '../utils/updateOperators.js';
+import { finalizeMatchStats, rebuildAllPlayerStats } from '../utils/matchStats.js';
+import PlayerModel from '../models/Player.js';
 
 export type QueryConstraint =
   | { type: 'where'; field: string; op: string; value: any }
@@ -13,6 +15,48 @@ export function serializeDoc(doc: any) {
   const withoutId = { ...value };
   delete withoutId._id;
   return { id, ...withoutId };
+}
+
+function isObjectId(value: any) {
+  return /^[a-f\d]{24}$/i.test(String(value || ''));
+}
+
+function sanitizePlayerPayload(payload: Record<string, any>) {
+  if ('email' in payload && !payload.email) payload.email = undefined;
+  if ('phone' in payload && !payload.phone) payload.phone = undefined;
+  if ('phoneNumber' in payload && !payload.phoneNumber) payload.phoneNumber = undefined;
+  return payload;
+}
+
+function sanitizeTeamPayload(payload: Record<string, any>) {
+  payload.name = String(payload.name || '').trim();
+  payload.players = Array.from(
+    new Set((Array.isArray(payload.players) ? payload.players : []).map(String).filter(isObjectId))
+  );
+  payload.captainId = payload.captainId && isObjectId(payload.captainId) ? payload.captainId : null;
+  payload.createdBy = String(payload.createdBy || '').trim();
+  payload.logo = payload.logo || '';
+  return payload;
+}
+
+function sanitizePayloadForModel(modelKey: string, payload: Record<string, any>) {
+  if (modelKey === 'players') return sanitizePlayerPayload(payload);
+  if (modelKey === 'teams') return sanitizeTeamPayload(payload);
+  return payload;
+}
+
+async function syncTeamPlayerLinks(teamId: string, players: any[] = []) {
+  if (!isObjectId(teamId)) return;
+
+  const playerIds = Array.from(new Set((players || []).map(String).filter(isObjectId)));
+  await PlayerModel.updateMany({ teams: teamId }, { $pull: { teams: teamId } });
+
+  if (playerIds.length > 0) {
+    await PlayerModel.updateMany(
+      { _id: { $in: playerIds } },
+      { $addToSet: { teams: teamId } }
+    );
+  }
 }
 
 export function buildQuery(path: string, constraints: QueryConstraint[] = []) {
@@ -80,12 +124,18 @@ export async function createDocumentByPath(path: string, data: any) {
     throw new Error('Collection path expected');
   }
 
-  const payload = normalizePayload(data || {});
+  const payload = sanitizePayloadForModel(meta.modelKey, normalizePayload(data || {}));
   if (meta.modelKey === 'balls') {
     payload.matchId = meta.matchId;
   }
 
   const doc = await model.create(payload);
+  if (meta.modelKey === 'matches' && doc.status === 'completed') {
+    await finalizeMatchStats(doc);
+  }
+  if (meta.modelKey === 'teams') {
+    await syncTeamPlayerLinks(String(doc._id), doc.players || []);
+  }
   return serializeDoc(doc);
 }
 
@@ -97,7 +147,7 @@ export async function setDocumentByPath(path: string, data: any) {
     throw new Error('Document path expected');
   }
 
-  const payload = normalizePayload(data || {});
+  const payload = sanitizePayloadForModel(meta.modelKey, normalizePayload(data || {}));
   const basePayload =
     meta.modelKey === 'balls'
       ? { ...payload, _id: meta.docId, matchId: meta.matchId }
@@ -134,7 +184,7 @@ export async function updateDocumentByPath(path: string, data: any) {
     throw new Error('Document not found');
   }
 
-  const updated = applyPatchedUpdate(existing.toObject(), data || {});
+  const updated = sanitizePayloadForModel(meta.modelKey, applyPatchedUpdate(existing.toObject(), data || {}));
   await model.replaceOne(
     meta.modelKey === 'balls'
       ? { _id: meta.docId, matchId: meta.matchId }
@@ -148,6 +198,22 @@ export async function updateDocumentByPath(path: string, data: any) {
       ? { _id: meta.docId, matchId: meta.matchId }
       : { _id: meta.docId }
   );
+
+  if (meta.modelKey === 'matches' && fresh) {
+    const wasFinalized = Boolean((existing as any).statsFinalized);
+    const isNowCompleted = fresh.status === 'completed';
+    const isNowUnfinalized = fresh.statsFinalized === false || fresh.status !== 'completed';
+
+    if (wasFinalized && isNowUnfinalized) {
+      await rebuildAllPlayerStats();
+    } else if (isNowCompleted) {
+      await finalizeMatchStats(fresh);
+    }
+  }
+
+  if (meta.modelKey === 'teams' && fresh) {
+    await syncTeamPlayerLinks(String(fresh._id), fresh.players || []);
+  }
 
   return serializeDoc(fresh);
 }

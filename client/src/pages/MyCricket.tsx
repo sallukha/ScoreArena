@@ -68,14 +68,17 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
     }, [user]);
 
     const loadingHistory = loadingPlayer || loadingMatches;
-    const playerMatches = allMatches
+    const playerMatches = linkedPlayer ? allMatches
         .filter((match: any) => {
             if (match.status !== 'live' && match.status !== 'completed') return false;
-            const createdByUser = match.createdBy === user?.uid;
             const playedByLinkedPlayer = linkedPlayer ? Boolean(match.playerStats?.[linkedPlayer.id]) : false;
-            return createdByUser || playedByLinkedPlayer;
+            const listedInMatchPlayers = Array.isArray(match.players) && match.players.map(String).includes(String(linkedPlayer.id));
+            const teamHasPlayer =
+                teams[match.teamA]?.players?.map?.(String).includes(String(linkedPlayer.id)) ||
+                teams[match.teamB]?.players?.map?.(String).includes(String(linkedPlayer.id));
+            return playedByLinkedPlayer || listedInMatchPlayers || teamHasPlayer;
         })
-        .sort((a: any, b: any) => getCreatedAtTime(b.createdAt) - getCreatedAtTime(a.createdAt));
+        .sort((a: any, b: any) => getCreatedAtTime(b.createdAt) - getCreatedAtTime(a.createdAt)) : [];
 
     const aggregatedStats = playerMatches.reduce((acc, match: any) => {
         const playerMatch = linkedPlayer ? match.playerStats?.[linkedPlayer.id] : null;
@@ -104,12 +107,12 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
     const strikeRate = summary.balls > 0 ? ((summary.runs / summary.balls) * 100).toFixed(1) : '0.0';
     const economyRate = summary.ballsBowled > 0 ? ((summary.runsConceded / summary.ballsBowled) * 6).toFixed(2) : '0.00';
     const recentPerformances = playerMatches
-        .filter((match: any) => linkedPlayer ? Boolean(match.playerStats?.[linkedPlayer.id]) : true)
+        .filter((match: any) => Boolean(match.playerStats?.[linkedPlayer.id]))
         .slice(0, 5);
     const teamHistory = Array.from(new Set(playerMatches.flatMap((match: any) => {
         const ids = [];
-        if (!linkedPlayer || teams[match.teamA]?.players?.includes?.(linkedPlayer.id) || match.playerStats?.[linkedPlayer.id]) ids.push(match.teamA);
-        if (!linkedPlayer || teams[match.teamB]?.players?.includes?.(linkedPlayer.id)) ids.push(match.teamB);
+        if (teams[match.teamA]?.players?.map?.(String).includes(String(linkedPlayer.id)) || match.playerStats?.[linkedPlayer.id]) ids.push(match.teamA);
+        if (teams[match.teamB]?.players?.map?.(String).includes(String(linkedPlayer.id))) ids.push(match.teamB);
         return ids.map((id) => teams[id]?.name).filter(Boolean);
     })));
     const achievements = [
@@ -238,7 +241,7 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
                     {!linkedPlayer && (
                         <div className="bg-yellow-50 border border-yellow-100 rounded-[1.75rem] px-4 py-4">
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-yellow-700">Player link pending</p>
-                            <p className="text-sm font-bold text-gray-700 mt-2">Abhi account ke created matches dikh rahe hain. Phone ya email se linked player milte hi playing stats bhi aa jayenge.</p>
+                            <p className="text-sm font-bold text-gray-700 mt-2">Is login email/phone se player profile link hote hi sirf aapki cricket history yahan dikhegi.</p>
                         </div>
                     )}
                     {playerMatches.map((match: any) => {
@@ -261,7 +264,7 @@ export const MyCricket = ({ teams, onMatchClick }: { teams: Record<string, any>;
                                             {teamAName} vs {teamBName}
                                         </h4>
                                         <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                                            {showPlayerStats ? `${linkedPlayer.name} performance` : 'Created by your account'}
+                                            {showPlayerStats ? `${linkedPlayer.name} performance` : 'Team match'}
                                         </p>
                                     </div>
                                     <ChevronRight size={18} className="text-gray-300 shrink-0 mt-1" />

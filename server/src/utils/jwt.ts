@@ -4,6 +4,8 @@ import { env } from '../config/env.js';
 type JwtPayload = {
   sub: string;
   role: string;
+  email?: string;
+  phoneNumber?: string;
   type: 'access';
   iat: number;
   exp: number;
@@ -38,11 +40,13 @@ function sign(content: string, secret: string) {
   return base64UrlEncode(crypto.createHmac('sha256', secret).update(content).digest());
 }
 
-export function createAccessToken(payload: { uid: string; role: string }) {
+export function createAccessToken(payload: { uid: string; role: string; email?: string; phoneNumber?: string }) {
   const now = Math.floor(Date.now() / 1000);
   const tokenPayload: JwtPayload = {
     sub: payload.uid,
     role: payload.role || 'user',
+    email: payload.email || '',
+    phoneNumber: payload.phoneNumber || '',
     type: 'access',
     iat: now,
     exp: now + Number(env.jwtExpiresInSeconds || DEFAULT_TTL_SECONDS),
