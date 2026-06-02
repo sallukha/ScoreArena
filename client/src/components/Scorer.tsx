@@ -337,11 +337,7 @@ const fetchPlayersByIds = async (playerIds: string[]) => {
 };
 
 const getExtraRunOptions = (extraType: 'wide' | 'no-ball') => {
-  const totals = extraType === 'no-ball' ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5];
-  return totals.map((total) => ({
-    total,
-    completedRuns: total - 1,
-  }));
+  return extraType === 'no-ball' ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5];
 };
 
 const WicketModal = ({
@@ -1033,6 +1029,10 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     let newExtras = currentScore.extras;
 
     const isLegalBall = isLegalDelivery(isExtra, extraType);
+    const isWideOrNoBall = extraType === 'wide' || extraType === 'no-ball';
+    const totalExtraRuns = isExtra ? (isWideOrNoBall ? runs : runs) : 0;
+    const completedRuns = isWideOrNoBall ? Math.max(0, runs - 1) : runs;
+    const batterRuns = !isExtra ? runs : (extraType === 'no-ball' ? completedRuns : 0);
 
     if (isLegalBall) {
       newBalls += 1;
@@ -1043,9 +1043,8 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     }
 
     if (isExtra) {
-      const extraRuns = (extraType === 'wide' || extraType === 'no-ball') ? (runs + 1) : runs;
-      newExtras += extraRuns;
-      newRuns += extraRuns;
+      newExtras += totalExtraRuns;
+      newRuns += totalExtraRuns;
     } else {
       newRuns += runs;
     }
@@ -1059,13 +1058,12 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     if (strikerId) {
       const stats = { ...(playerStats[strikerId] || { runs: 0, balls: 0, fours: 0, sixes: 0, overs: 0, ballsBowled: 0, runsConceded: 0, wickets: 0 }) };
       const facesBall = isLegalBall;
-      const getsRuns = !isExtra || extraType === 'no-ball';
 
       if (facesBall) stats.balls += 1;
-      if (getsRuns) {
-        stats.runs += runs;
-        if (runs === 4) stats.fours += 1;
-        if (runs === 6) stats.sixes += 1;
+      if (batterRuns > 0) {
+        stats.runs += batterRuns;
+        if (batterRuns === 4) stats.fours += 1;
+        if (batterRuns === 6) stats.sixes += 1;
       }
       playerStats[strikerId] = stats;
     }
@@ -1081,8 +1079,8 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       }
 
       if (isExtra) {
-        if (extraType === 'wide' || extraType === 'no-ball') {
-          stats.runsConceded += (runs + 1);
+        if (isWideOrNoBall) {
+          stats.runsConceded += totalExtraRuns;
         }
       } else {
         stats.runsConceded += runs;
@@ -1120,7 +1118,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     let newStriker: string | undefined = strikerId;
     let newNonStriker: string | undefined = nonStrikerId;
 
-    if (shouldRotateStrikeForCompletedRuns(runs, extraType)) {
+    if (shouldRotateStrikeForCompletedRuns(completedRuns, extraType)) {
       [newStriker, newNonStriker] = [newNonStriker, newStriker];
     }
 
@@ -1153,7 +1151,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
       const recentBalls = [...(match.recentBalls || [])];
       recentBalls.push({
-        runs,
+        runs: completedRuns,
         isExtra,
         extraType: extraType || null,
         isWicket: false,
@@ -1194,7 +1192,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           innings: match.currentInnings,
           over: isLegalBall && newBalls === 0 ? newOvers - 1 : newOvers,
           ball: isLegalBall && newBalls === 0 ? 6 : newBalls,
-          runs,
+          runs: completedRuns,
           extraType: extraType || null,
           freeHit: isCurrentBallFreeHit,
           batsman: strikerId || null,
@@ -1246,7 +1244,9 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     }
 
     const isExtraWicket = Boolean(extraType);
-    const extraTotal = extraType ? extraRuns + 1 : 0;
+    const isWideOrNoBall = extraType === 'wide' || extraType === 'no-ball';
+    const extraTotal = extraType ? extraRuns : 0;
+    const completedExtraRuns = isWideOrNoBall ? Math.max(0, extraRuns - 1) : extraRuns;
     const countsAsWicket = type !== 'retired-hurt';
     const newWickets = currentScore.wickets + (countsAsWicket ? 1 : 0);
     const isLegalBall = type !== 'retired-hurt' && !isExtraWicket;
@@ -1293,9 +1293,9 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
       const stats = { ...(playerStats[strikerId] || { runs: 0, balls: 0, fours: 0, sixes: 0, overs: 0, ballsBowled: 0, runsConceded: 0, wickets: 0 }) };
       if (isLegalBall) stats.balls += 1;
       if (extraType === 'no-ball') {
-        stats.runs += extraRuns;
-        if (extraRuns === 4) stats.fours += 1;
-        if (extraRuns === 6) stats.sixes += 1;
+        stats.runs += completedExtraRuns;
+        if (completedExtraRuns === 4) stats.fours += 1;
+        if (completedExtraRuns === 6) stats.sixes += 1;
       }
       playerStats[strikerId] = stats;
     }
@@ -1358,7 +1358,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
     const recentBalls = [...(match.recentBalls || [])];
     recentBalls.push({
-      runs: extraRuns,
+      runs: completedExtraRuns,
       isExtra: isExtraWicket,
       extraType: extraType || null,
       isWicket: countsAsWicket,
@@ -1387,7 +1387,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         nextStrikerName = match.nonStrikerName || null;
         nextNonStriker = null;
         nextNonStrikerName = null;
-      } else if (shouldRotateStrikeForCompletedRuns(extraRuns, extraType)) {
+      } else if (shouldRotateStrikeForCompletedRuns(completedExtraRuns, extraType)) {
         nextStriker = match.nonStriker || null;
         nextStrikerName = match.nonStrikerName || null;
         nextNonStriker = null;
@@ -1436,7 +1436,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           innings: match.currentInnings,
           over: newBalls === 0 && isLegalBall ? newOvers - 1 : newOvers,
           ball: newBalls === 0 && isLegalBall ? 6 : newBalls,
-          runs: extraRuns,
+          runs: completedExtraRuns,
           extraType: extraType || null,
           wicket: countsAsWicket ? {
             type,
@@ -2009,6 +2009,29 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         </div>
       </div>
 
+      <div className="mx-4 mt-4 rounded-2xl border border-yellow-100 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Live Streaming</h3>
+            <p className="mt-1 truncate text-xs font-bold text-gray-600">
+              {match.streamUrl ? 'Stream link active hai' : 'YouTube/Facebook stream link add karo'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setStreamUrlInput(match.streamUrl || '');
+              setStreamMessage('');
+              setIsStreamPanelOpen((value) => !value);
+            }}
+            className="shrink-0 rounded-2xl bg-black px-4 py-3 text-[10px] font-black uppercase tracking-widest text-yellow-500 flex items-center gap-2"
+          >
+            <Video size={16} />
+            {match.streamUrl ? 'Edit Stream' : 'Add Stream'}
+          </button>
+        </div>
+      </div>
+
       {isStreamPanelOpen && (
         <div className="mx-4 mt-4 rounded-2xl border border-yellow-100 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
@@ -2296,11 +2319,11 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                   </button>
                 </div>
                 <div className="grid grid-cols-5 gap-2">
-                  {getExtraRunOptions(extraMode).map(({ total, completedRuns }) => (
+                  {getExtraRunOptions(extraMode).map((total) => (
                     <button
                       key={total}
                       onClick={() => {
-                        handleRun(completedRuns, true, extraMode);
+                        handleRun(total, true, extraMode);
                         setExtraMode(null);
                       }}
                       className="h-12 bg-white rounded-xl font-black text-lg shadow-sm border-b-2 border-gray-200 active:scale-90 transition-all"
@@ -2310,11 +2333,11 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                   ))}
                 </div>
                 <div className="grid grid-cols-5 gap-2">
-                  {getExtraRunOptions(extraMode).map(({ total, completedRuns }) => (
+                  {getExtraRunOptions(extraMode).map((total) => (
                     <button
                       key={`wicket-${total}`}
                       onClick={() => {
-                        setPendingWicketExtra({ type: extraMode, runs: completedRuns });
+                        setPendingWicketExtra({ type: extraMode, runs: total });
                         setIsWicketModalOpen(true);
                         setExtraMode(null);
                       }}
