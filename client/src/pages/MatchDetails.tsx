@@ -1,9 +1,46 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Share2, Trash2 } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Share2, Trash2 } from 'lucide-react';
 import { db, doc, getDoc, query, collection, onSnapshot, orderBy } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useDeleteMatchMutation } from '../features/matches/hooks/useMatchMutations';
+
+const getStreamEmbedUrl = (url?: string | null) => {
+    if (!url) return null;
+
+    try {
+        const parsed = new URL(url);
+        const host = parsed.hostname.replace(/^www\./, '');
+
+        if (host === 'youtu.be') {
+            const videoId = parsed.pathname.split('/').filter(Boolean)[0];
+            return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0` : null;
+        }
+
+        if (host.endsWith('youtube.com')) {
+            const videoId = parsed.searchParams.get('v');
+            if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+
+            const parts = parsed.pathname.split('/').filter(Boolean);
+            const liveIndex = parts.findIndex((part) => part === 'live');
+            if (liveIndex >= 0 && parts[liveIndex + 1]) {
+                return `https://www.youtube.com/embed/${parts[liveIndex + 1]}?autoplay=1&rel=0`;
+            }
+            const shortsIndex = parts.findIndex((part) => part === 'shorts');
+            if (shortsIndex >= 0 && parts[shortsIndex + 1]) {
+                return `https://www.youtube.com/embed/${parts[shortsIndex + 1]}?autoplay=1&rel=0`;
+            }
+        }
+
+        if (host.endsWith('facebook.com') || host.endsWith('fb.watch')) {
+            return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&autoplay=true`;
+        }
+    } catch (error) {
+        return null;
+    }
+
+    return url;
+};
 
 export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () => void }) => {
     const [match, setMatch] = useState<any>(null);
@@ -141,6 +178,7 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
     };
 
     const canDeleteMatch = !!user && (user.role === 'admin' || user.uid === match.createdBy);
+    const streamEmbedUrl = getStreamEmbedUrl(match.streamUrl);
 
     const handleDeleteMatch = async () => {
         const confirmation = window.confirm(
@@ -245,6 +283,41 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                                 </p>
                             </div>
                         </div>
+
+                        {match.streamUrl && (
+                            <div className="overflow-hidden rounded-[2.5rem] border border-gray-100 bg-black shadow-sm">
+                                <div className="flex items-center justify-between gap-3 bg-white px-5 py-4">
+                                    <div className="min-w-0">
+                                        <h3 className="text-[10px] font-black uppercase tracking-widest text-red-600">Live Stream</h3>
+                                        <p className="mt-1 truncate text-xs font-bold text-gray-500">{teamA.name} vs {teamB.name}</p>
+                                    </div>
+                                    <a
+                                        href={match.streamUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="shrink-0 rounded-2xl bg-black px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white flex items-center gap-2"
+                                    >
+                                        <ExternalLink size={14} />
+                                        Open
+                                    </a>
+                                </div>
+                                {streamEmbedUrl ? (
+                                    <iframe
+                                        title={`${teamA.name} vs ${teamB.name} live stream`}
+                                        src={streamEmbedUrl}
+                                        className="aspect-video w-full"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowFullScreen
+                                    />
+                                ) : (
+                                    <div className="aspect-video w-full flex items-center justify-center px-6 text-center">
+                                        <a href={match.streamUrl} target="_blank" rel="noreferrer" className="text-sm font-black uppercase tracking-widest text-yellow-500">
+                                            Open Live Stream
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {match.status === 'live' && (
                             <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-gray-100">

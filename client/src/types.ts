@@ -137,6 +137,7 @@ export interface Match {
     innings: number;
   }[];
   isFreeHit?: boolean;
+  streamUrl?: string | null;
   createdBy: string;
   createdAt: any;
 }

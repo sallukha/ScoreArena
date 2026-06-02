@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { db, doc, collection, onSnapshot, auth, getDoc, handleFirestoreError, OperationType, getDocs, query, where, orderBy, limit } from '../firebase';
-import { ArrowLeft, ChevronRight, User, Settings2, History, CheckCircle2, Search, RotateCcw, XCircle, AlertCircle, Trophy, Star, Target, Share2 } from 'lucide-react';
+import { ArrowLeft, ChevronRight, User, Settings2, History, CheckCircle2, Search, RotateCcw, XCircle, AlertCircle, Trophy, Star, Target, Share2, Video } from 'lucide-react';
 import { Match, Team, Player } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { MilestonePoster } from './MilestonePoster';
@@ -336,6 +336,14 @@ const fetchPlayersByIds = async (playerIds: string[]) => {
   return uniqueIds.map((id) => byId.get(id)).filter(Boolean) as Player[];
 };
 
+const getExtraRunOptions = (extraType: 'wide' | 'no-ball') => {
+  const totals = extraType === 'no-ball' ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5];
+  return totals.map((total) => ({
+    total,
+    completedRuns: total - 1,
+  }));
+};
+
 const WicketModal = ({
   isOpen,
   onClose,
@@ -574,6 +582,9 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     target: number;
   }>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [isStreamPanelOpen, setIsStreamPanelOpen] = useState(false);
+  const [streamUrlInput, setStreamUrlInput] = useState('');
+  const [streamMessage, setStreamMessage] = useState('');
   const updateMatchMutation = useUpdateMatchMutation();
   const createMatchBallMutation = useCreateMatchBallMutation();
   const deleteMatchBallMutation = useDeleteMatchBallMutation();
@@ -629,6 +640,42 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         .map((entry) => entry.player)
         .filter(Boolean)
     );
+  };
+
+  const handleSaveStreamUrl = async () => {
+    if (!match) return;
+    const streamUrl = streamUrlInput.trim();
+    if (!streamUrl) {
+      setStreamMessage('Live stream link paste karo.');
+      return;
+    }
+
+    try {
+      await updateMatchMutation.mutateAsync({
+        matchId,
+        payload: { streamUrl },
+      });
+      setStreamMessage('Live stream match page par show ho raha hai.');
+      setIsStreamPanelOpen(false);
+    } catch (error) {
+      console.error('Error saving stream link:', error);
+      setStreamMessage('Stream link save nahi ho paya.');
+    }
+  };
+
+  const handleClearStreamUrl = async () => {
+    if (!match) return;
+    try {
+      await updateMatchMutation.mutateAsync({
+        matchId,
+        payload: { streamUrl: null },
+      });
+      setStreamUrlInput('');
+      setStreamMessage('Live stream hata diya gaya.');
+    } catch (error) {
+      console.error('Error clearing stream link:', error);
+      setStreamMessage('Stream link remove nahi ho paya.');
+    }
   };
 
   const getWicketsToAllOut = () => Math.max(0, battingPlayers.length - 1);
@@ -762,6 +809,10 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
     });
     return () => unsub();
   }, [matchId]);
+
+  useEffect(() => {
+    setStreamUrlInput(match?.streamUrl || '');
+  }, [match?.streamUrl]);
 
   useEffect(() => {
     if (!match?.teamA || !match?.teamB) return;
@@ -1896,6 +1947,17 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
             <Share2 size={20} />
           </button>
           <button
+            onClick={() => {
+              setStreamUrlInput(match.streamUrl || '');
+              setStreamMessage('');
+              setIsStreamPanelOpen((value) => !value);
+            }}
+            className={`p-2 rounded-full transition-colors ${match.streamUrl ? 'bg-black text-yellow-500' : 'hover:bg-yellow-600'}`}
+            title="Live Stream"
+          >
+            <Video size={20} />
+          </button>
+          <button
             onClick={handleRefresh}
             className={`p-2 hover:bg-yellow-600 rounded-full transition-colors ${isRefreshing ? 'animate-spin' : ''}`}
             title="Refresh Data"
@@ -1946,6 +2008,55 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
           )}
         </div>
       </div>
+
+      {isStreamPanelOpen && (
+        <div className="mx-4 mt-4 rounded-2xl border border-yellow-100 bg-white p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Live Streaming</h3>
+              <p className="mt-1 text-xs font-bold text-gray-500">YouTube, Facebook ya kisi public live video ka link paste karo.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsStreamPanelOpen(false)}
+              className="rounded-full bg-gray-100 p-2 text-gray-500"
+              title="Close stream panel"
+            >
+              <XCircle size={18} />
+            </button>
+          </div>
+          <div className="mt-4 flex flex-col gap-3">
+            <input
+              type="url"
+              value={streamUrlInput}
+              onChange={(event) => setStreamUrlInput(event.target.value)}
+              placeholder="https://youtube.com/live/..."
+              className="w-full rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-yellow-500"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={handleSaveStreamUrl}
+                disabled={updateMatchMutation.isPending}
+                className="rounded-2xl bg-yellow-500 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black disabled:opacity-50"
+              >
+                Start Stream
+              </button>
+              <button
+                type="button"
+                onClick={handleClearStreamUrl}
+                disabled={updateMatchMutation.isPending || !match.streamUrl}
+                className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-600 disabled:opacity-50"
+              >
+                Stop Stream
+              </button>
+            </div>
+            {streamMessage && (
+              <p className="text-[10px] font-black uppercase tracking-widest text-green-600">{streamMessage}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="p-4 flex flex-col gap-4">
         {/* Warning if no players */}
@@ -2185,31 +2296,31 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                   </button>
                 </div>
                 <div className="grid grid-cols-5 gap-2">
-                  {(extraMode === 'no-ball' ? [0, 1, 2, 3, 4, 5, 6] : [0, 1, 2, 3, 4]).map(run => (
+                  {getExtraRunOptions(extraMode).map(({ total, completedRuns }) => (
                     <button
-                      key={run}
+                      key={total}
                       onClick={() => {
-                        handleRun(run, true, extraMode);
+                        handleRun(completedRuns, true, extraMode);
                         setExtraMode(null);
                       }}
                       className="h-12 bg-white rounded-xl font-black text-lg shadow-sm border-b-2 border-gray-200 active:scale-90 transition-all"
                     >
-                      {run}
+                      {total}
                     </button>
                   ))}
                 </div>
                 <div className="grid grid-cols-5 gap-2">
-                  {(extraMode === 'no-ball' ? [0, 1, 2, 3, 4, 5, 6] : [0, 1, 2, 3, 4]).map(run => (
+                  {getExtraRunOptions(extraMode).map(({ total, completedRuns }) => (
                     <button
-                      key={`wicket-${run}`}
+                      key={`wicket-${total}`}
                       onClick={() => {
-                        setPendingWicketExtra({ type: extraMode, runs: run });
+                        setPendingWicketExtra({ type: extraMode, runs: completedRuns });
                         setIsWicketModalOpen(true);
                         setExtraMode(null);
                       }}
                       className="h-11 rounded-xl border border-red-100 bg-red-50 text-xs font-black text-red-600 shadow-sm active:scale-90 transition-all"
                     >
-                      W+{run}
+                      W+{total}
                     </button>
                   ))}
                 </div>
