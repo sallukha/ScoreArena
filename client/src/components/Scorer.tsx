@@ -342,6 +342,14 @@ const getExtraRunOptions = (extraType: 'wide' | 'no-ball') => {
   return extraType === 'no-ball' ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5];
 };
 
+const getExtraTotalRuns = (ball: any) => {
+  const completedRuns = Number(ball?.runs || 0);
+  if (ball?.extraType === 'wide' || ball?.extraType === 'no-ball') {
+    return completedRuns + 1;
+  }
+  return completedRuns;
+};
+
 const WicketModal = ({
   isOpen,
   onClose,
@@ -1506,7 +1514,7 @@ export const Scorer = ({ matchId, onBack, openStreamPanel = false }: { matchId: 
       const currentScore = (match as any)[scoreKey];
 
       const isWideOrNoBall = lastBall.extraType === 'wide' || lastBall.extraType === 'no-ball';
-      const extraRuns = lastBall.extraType ? (isWideOrNoBall ? Number(lastBall.runs || 0) + 1 : Number(lastBall.runs || 0)) : 0;
+      const extraRuns = lastBall.extraType ? getExtraTotalRuns(lastBall) : 0;
       const batterRuns = !lastBall.extraType || lastBall.extraType === 'no-ball' ? Number(lastBall.runs || 0) : 0;
       const isLegalBall = !lastBall.extraType || lastBall.extraType === 'bye' || lastBall.extraType === 'leg-bye';
       const facesBall = !lastBall.extraType || lastBall.extraType === 'no-ball' || lastBall.extraType === 'bye' || lastBall.extraType === 'leg-bye';
@@ -1668,8 +1676,8 @@ export const Scorer = ({ matchId, onBack, openStreamPanel = false }: { matchId: 
       if (wicketType === 'stumped' && fielderName) return `Wicket • Stumped by ${fielderName}`;
       return `Wicket${wicketType ? ` • ${wicketType}` : ''}`;
     }
-    if (ball.extraType === 'wide') return `${Number(ball.runs || 0) + 1} Wide`;
-    if (ball.extraType === 'no-ball') return `${Number(ball.runs || 0) + 1} No Ball`;
+    if (ball.extraType === 'wide') return `${getExtraTotalRuns(ball)} Wide`;
+    if (ball.extraType === 'no-ball') return `${getExtraTotalRuns(ball)} No Ball`;
     if (ball.extraType) return `${ball.runs} ${ball.extraType}`;
     return `${ball.runs} Run${Number(ball.runs) === 1 ? '' : 's'}`;
   };
@@ -2133,8 +2141,8 @@ export const Scorer = ({ matchId, onBack, openStreamPanel = false }: { matchId: 
                   }`}
               >
                 {ball.wicket ? 'W' :
-                  ball.extraType === 'wide' ? `${ball.runs + 1}W` :
-                    ball.extraType === 'no-ball' ? `${ball.runs + 1}N` :
+                  ball.extraType === 'wide' ? `${getExtraTotalRuns(ball)}W` :
+                    ball.extraType === 'no-ball' ? `${getExtraTotalRuns(ball)}N` :
                       ball.extraType ? `${ball.runs}${ball.extraType[0].toUpperCase()}` :
                         ball.runs}
               </motion.div>
@@ -2293,8 +2301,8 @@ export const Scorer = ({ matchId, onBack, openStreamPanel = false }: { matchId: 
                               'bg-gray-100 text-gray-800'
                     }`}
                 >
-                  {ball.extraType === 'wide' ? `${ball.runs + 1}W` :
-                    ball.extraType === 'no-ball' ? `${ball.runs + 1}N` :
+                  {ball.extraType === 'wide' ? `${getExtraTotalRuns(ball)}W` :
+                    ball.extraType === 'no-ball' ? `${getExtraTotalRuns(ball)}N` :
                       ball.runs}
                 </div>
               ))}

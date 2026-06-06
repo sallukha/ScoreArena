@@ -148,7 +148,7 @@ export const WebRtcBroadcastControls = ({ matchId }: { matchId: string }) => {
   }, []);
 
   return (
-    <div className="rounded-2xl border border-yellow-100 bg-white p-4 shadow-sm">
+    <div className="sticky top-0 z-30 rounded-2xl border border-yellow-100 bg-white p-4 shadow-lg">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -162,13 +162,8 @@ export const WebRtcBroadcastControls = ({ matchId }: { matchId: string }) => {
           {viewerCount}
         </div>
       </div>
-      <div className="mt-4 overflow-hidden rounded-2xl bg-black">
+      <div className={`mt-4 overflow-hidden rounded-2xl bg-black ${isLive ? 'block' : 'hidden'}`}>
         <video ref={videoRef} autoPlay muted playsInline className={`aspect-video w-full object-cover ${isLive ? 'block' : 'hidden'}`} />
-        {!isLive && (
-          <div className="aspect-video w-full flex items-center justify-center text-yellow-500">
-            <Video size={32} />
-          </div>
-        )}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3">
         <button
@@ -178,7 +173,7 @@ export const WebRtcBroadcastControls = ({ matchId }: { matchId: string }) => {
             isLive ? 'bg-red-600 text-white' : 'bg-black text-yellow-500'
           }`}
         >
-          {isLive ? <Square size={16} /> : <Radio size={16} />}
+          {isLive ? <Square size={16} /> : <Video size={16} />}
           {isLive ? 'Stop Live Video' : 'Start Live Video'}
         </button>
         <button
