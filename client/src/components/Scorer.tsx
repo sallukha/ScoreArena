@@ -9,6 +9,8 @@ import { useCreatePlayerMutation } from '../features/players/hooks/usePlayerMuta
 import { useUpdateTeamMutation } from '../features/teams/hooks/useTeamMutations';
 import { useAuth } from '../contexts/AuthContext';
 import { findPlayersByContact, normalizeEmail, normalizePhone, searchPlayersByContact } from '../utils/playerLookup';
+import { normalizeStreamUrl } from '../utils/streamEmbed';
+import { WebRtcBroadcastControls } from './WebRtcBroadcastControls';
 
 const PlayerSelectionModal = ({
   isOpen,
@@ -123,14 +125,14 @@ const PlayerSelectionModal = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 z-[100] backdrop-blur-sm"
+            className="fixed inset-0 bg-black/60 z-100 backdrop-blur-sm"
           />
           <motion.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed bottom-0 left-0 right-0 bg-white z-[110] rounded-t-[2.5rem] max-h-[85vh] flex flex-col overflow-hidden"
+            className="fixed bottom-0 left-0 right-0 bg-white z-110 rounded-t-[2.5rem] max-h-[85vh] flex flex-col overflow-hidden"
           >
             <div className="p-6 border-b border-gray-100">
               <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6" />
@@ -396,13 +398,13 @@ const WicketModal = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 z-[100] backdrop-blur-sm"
+            className="fixed inset-0 bg-black/60 z-100 backdrop-blur-sm"
           />
           <motion.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            className="fixed bottom-0 left-0 right-0 bg-white z-[110] rounded-t-[2.5rem] p-6 flex flex-col gap-6"
+            className="fixed bottom-0 left-0 right-0 bg-white z-110 rounded-t-[2.5rem] p-6 flex flex-col gap-6"
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto" />
             <h3 className="text-xl font-black italic uppercase tracking-tight text-gray-900">How was the wicket?</h3>
@@ -490,13 +492,13 @@ const ExtrasModal = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 z-[100] backdrop-blur-sm"
+            className="fixed inset-0 bg-black/60 z-100 backdrop-blur-sm"
           />
           <motion.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            className="fixed bottom-0 left-0 right-0 bg-white z-[110] rounded-t-[2.5rem] p-6 flex flex-col gap-6"
+            className="fixed bottom-0 left-0 right-0 bg-white z-110 rounded-t-[2.5rem] p-6 flex flex-col gap-6"
           >
             <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto" />
             <h3 className="text-xl font-black italic uppercase tracking-tight text-gray-900">Select Extra Type</h3>
@@ -543,7 +545,7 @@ const ExtrasModal = ({
   );
 };
 
-export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => void }) => {
+export const Scorer = ({ matchId, onBack, openStreamPanel = false }: { matchId: string, onBack: () => void, openStreamPanel?: boolean }) => {
   const { user } = useAuth();
   const [match, setMatch] = useState<Match | null>(null);
   const [teamA, setTeamA] = useState<Team | null>(null);
@@ -640,9 +642,9 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
 
   const handleSaveStreamUrl = async () => {
     if (!match) return;
-    const streamUrl = streamUrlInput.trim();
+    const streamUrl = normalizeStreamUrl(streamUrlInput);
     if (!streamUrl) {
-      setStreamMessage('Live stream link paste karo.');
+      setStreamMessage('Valid live stream link paste karo.');
       return;
     }
 
@@ -809,6 +811,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   useEffect(() => {
     setStreamUrlInput(match?.streamUrl || '');
   }, [match?.streamUrl]);
+
+  useEffect(() => {
+    if (openStreamPanel) {
+      setIsStreamPanelOpen(true);
+      setStreamMessage('');
+    }
+  }, [openStreamPanel, matchId]);
 
   useEffect(() => {
     if (!match?.teamA || !match?.teamB) return;
@@ -1348,7 +1357,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         type,
         bowler: bowlerId || 'Unknown',
         bowlerName: bowlerName || undefined,
-        fielder: fielderId || null,
+        fielder: fielderId ?? undefined,
         fielderName: fielderName || undefined,
         score: newRuns,
         balls: currentScore.balls + (currentScore.overs * 6),
@@ -1684,7 +1693,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
   if (!canUpdateMatch) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-6 w-full max-w-md text-center">
+        <div className="bg-white rounded-4xl border border-gray-100 shadow-sm p-6 w-full max-w-md text-center">
           <p className="text-xs font-black uppercase tracking-widest text-red-500">Scoring Locked</p>
           <h2 className="text-2xl font-black italic uppercase tracking-tight text-gray-900 mt-3">
             {teamA.name} vs {teamB.name}
@@ -1768,13 +1777,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setOverEndNotice(null)}
-              className="fixed inset-0 z-[140] bg-black/65 backdrop-blur-sm"
+              className="fixed inset-0 z-140 bg-black/65 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 12 }}
-              className="fixed inset-x-4 top-1/2 z-[150] -translate-y-1/2 rounded-[2rem] bg-white p-6 shadow-2xl border border-yellow-100 max-w-sm mx-auto"
+              className="fixed inset-x-4 top-1/2 z-150 -translate-y-1/2 rounded-4xl bg-white p-6 shadow-2xl border border-yellow-100 max-w-sm mx-auto"
             >
               <div className="flex flex-col gap-5">
                 <div className="flex items-start justify-between gap-4">
@@ -1828,13 +1837,13 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[145] bg-black/70 backdrop-blur-sm"
+              className="fixed inset-0 z-145 bg-black/70 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 12 }}
-              className="fixed inset-x-4 top-1/2 z-[155] -translate-y-1/2 rounded-[2rem] bg-white p-6 shadow-2xl border border-yellow-100 max-w-sm mx-auto"
+              className="fixed inset-x-4 top-1/2 z-155 -translate-y-1/2 rounded-4xl bg-white p-6 shadow-2xl border border-yellow-100 max-w-sm mx-auto"
             >
               <div className="flex flex-col gap-5">
                 <div className="flex items-start justify-between gap-4">
@@ -1891,7 +1900,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
         )}
       </AnimatePresence>
       {match.status === 'completed' && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-150 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
           <motion.div
             initial={{ scale: 0.5, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -1904,7 +1913,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
               <h2 className="text-4xl font-black italic uppercase tracking-tighter text-black leading-none">Match Over!</h2>
               <div className="h-1 w-12 bg-black mx-auto rounded-full mt-2" />
             </div>
-            <div className="bg-black/5 p-6 rounded-[2rem] border border-black/10 w-full">
+            <div className="bg-black/5 p-6 rounded-4xl border border-black/10 w-full">
               <p className="text-black font-black text-[10px] uppercase tracking-[0.2em] mb-2 opacity-60">{isMatchTie ? 'Result' : 'Congratulations'}</p>
               <p className="text-2xl font-black italic uppercase tracking-tighter text-black">
                 {isMatchTie ? 'Match tie ho gaya!' : `${winningTeamName} Wins!`}
@@ -1975,6 +1984,10 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
             <Settings2 size={20} />
           </button>
         </div>
+      </div>
+
+      <div className="bg-yellow-500 px-4 pb-4">
+        <WebRtcBroadcastControls matchId={matchId} />
       </div>
 
       <div className="bg-black text-white p-6 flex flex-col gap-4 shadow-xl">
@@ -2110,7 +2123,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
                 initial={{ scale: 0, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 key={ball.id || i}
-                className={`min-w-[40px] h-10 rounded-full flex items-center justify-center font-black text-xs shadow-sm border-2 ${ball.wicket ? 'bg-red-600 text-white border-red-700' :
+                className={`min-w-10 h-10 rounded-full flex items-center justify-center font-black text-xs shadow-sm border-2 ${ball.wicket ? 'bg-red-600 text-white border-red-700' :
                     ball.runs === 4 ? 'bg-green-500 text-white border-green-600' :
                       ball.runs === 6 ? 'bg-purple-600 text-white border-purple-700' :
                         ball.extraType === 'wide' ? 'bg-blue-500 text-white border-blue-600' :
@@ -2128,7 +2141,7 @@ export const Scorer = ({ matchId, onBack }: { matchId: string, onBack: () => voi
             ))}
             {/* Empty slots for remaining balls in over */}
             {Array.from({ length: Math.max(0, 6 - recentBalls.filter(b => !b.extraType || b.extraType === 'bye' || b.extraType === 'leg-bye').length) }).map((_, i) => (
-              <div key={`empty-${i}`} className="min-w-[40px] h-10 rounded-full border-2 border-dashed border-gray-100" />
+              <div key={`empty-${i}`} className="min-w-10 h-10 rounded-full border-2 border-dashed border-gray-100" />
             ))}
           </div>
         </div>

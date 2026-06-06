@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LogOut, Share2, Settings, History, Info, HelpCircle, Users, Trophy, ArrowLeft, Mail, MessageCircle, ShieldCheck, Smartphone, MoonStar, BellRing, ChevronRight } from 'lucide-react';
+import { LogOut, Share2, Settings, History, Info, HelpCircle, Users, Trophy, ArrowLeft, Mail, MessageCircle, ShieldCheck, Smartphone, MoonStar, BellRing, ChevronRight, Video } from 'lucide-react';
 import { CreatePlayer } from './components/CreatePlayer';
 import { CreateTeam } from './components/CreateTeam';
 import { StartMatch } from './components/StartMatch';
@@ -91,6 +91,7 @@ const MainContent = () => {
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [openStreamPanelOnScorer, setOpenStreamPanelOnScorer] = useState(false);
 
   useEffect(() => {
     if (!user?.uid) {
@@ -166,6 +167,25 @@ const MainContent = () => {
     }
   };
 
+  const handleOpenLiveStreaming = () => {
+    const liveMatch = [...matches, ...globalMatches].find((match) => {
+      if (match.status !== 'live') return false;
+      return match.createdBy === user.uid || user.role === 'admin';
+    });
+
+    setIsMenuOpen(false);
+
+    if (!liveMatch) {
+      window.alert('Live streaming add karne ke liye pehle apna live match start karo.');
+      return;
+    }
+
+    setSharedMatchId(null);
+    setActiveMatchId(liveMatch.id);
+    setOpenStreamPanelOnScorer(true);
+    setView('scorer');
+  };
+
   const renderPage = () => {
     const canOpenScorer = (match: { status?: string; createdBy?: string } | undefined) => {
       if (!match || match.status !== 'live' || !user) return false;
@@ -176,6 +196,7 @@ const MainContent = () => {
       const allMatches = [...matches, ...recentMatches, ...globalMatches];
       const match = allMatches.find((item) => item.id === id);
       setActiveMatchId(id);
+      setOpenStreamPanelOnScorer(false);
       if (canOpenScorer(match)) {
         setSharedMatchId(null);
         setView('scorer');
@@ -205,7 +226,7 @@ const MainContent = () => {
     );
     if (view === 'create-team') return <CreateTeam onBack={() => setView('main')} />;
     if (view === 'create-player') return <CreatePlayer onBack={() => setView('main')} />;
-    if (view === 'start-match') return <StartMatch mode="normal" onBack={() => setView('main')} onStart={(id) => { setActiveMatchId(id); setView('scorer'); }} />;
+    if (view === 'start-match') return <StartMatch mode="normal" onBack={() => setView('main')} onStart={(id) => { setActiveMatchId(id); setOpenStreamPanelOnScorer(false); setView('scorer'); }} />;
     if (view === 'start-tournament-match') return (
       <StartMatch
         mode="tournament"
@@ -214,7 +235,7 @@ const MainContent = () => {
           setView('main');
           setActiveTab('tournaments');
         }}
-        onStart={(id) => { setActiveMatchId(id); setView('scorer'); }}
+        onStart={(id) => { setActiveMatchId(id); setOpenStreamPanelOnScorer(false); setView('scorer'); }}
       />
     );
     if (view === 'create-tournament') return <CreateTournament onBack={() => setView('main')} />;
@@ -239,8 +260,9 @@ const MainContent = () => {
         }}
       />
     );
-    if (view === 'scorer' && activeMatchId) return <Scorer matchId={activeMatchId} onBack={() => {
+    if (view === 'scorer' && activeMatchId) return <Scorer matchId={activeMatchId} openStreamPanel={openStreamPanelOnScorer} onBack={() => {
       setSharedMatchId(null);
+      setOpenStreamPanelOnScorer(false);
       setView('main');
     }} />;
     if (view === 'matchDetails' && activeMatchId) return <MatchDetailsPage matchId={activeMatchId} onBack={() => {
@@ -493,6 +515,7 @@ const MainContent = () => {
                 <MenuLinkUI icon={History} label="Match History" onClick={() => { setActiveTab('myCricket'); setIsMenuOpen(false); }} />
                 <MenuLinkUI icon={Users} label="My Teams" onClick={() => { setActiveTab('teams'); setIsMenuOpen(false); }} />
                 <MenuLinkUI icon={Trophy} label="My Tournaments" onClick={() => { setActiveTab('tournaments'); setIsMenuOpen(false); }} />
+                <MenuLinkUI icon={Video} label="Start Live Video" onClick={handleOpenLiveStreaming} />
                 <button
                   onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
                   className="w-full flex items-center justify-between gap-4 px-6 py-3.5 text-gray-700 hover:bg-gray-50 transition-colors group"

@@ -4,43 +4,8 @@ import { ArrowLeft, ExternalLink, Share2, Trash2 } from 'lucide-react';
 import { db, doc, getDoc, query, collection, onSnapshot, orderBy } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useDeleteMatchMutation } from '../features/matches/hooks/useMatchMutations';
-
-const getStreamEmbedUrl = (url?: string | null) => {
-    if (!url) return null;
-
-    try {
-        const parsed = new URL(url);
-        const host = parsed.hostname.replace(/^www\./, '');
-
-        if (host === 'youtu.be') {
-            const videoId = parsed.pathname.split('/').filter(Boolean)[0];
-            return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0` : null;
-        }
-
-        if (host.endsWith('youtube.com')) {
-            const videoId = parsed.searchParams.get('v');
-            if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
-
-            const parts = parsed.pathname.split('/').filter(Boolean);
-            const liveIndex = parts.findIndex((part) => part === 'live');
-            if (liveIndex >= 0 && parts[liveIndex + 1]) {
-                return `https://www.youtube.com/embed/${parts[liveIndex + 1]}?autoplay=1&rel=0`;
-            }
-            const shortsIndex = parts.findIndex((part) => part === 'shorts');
-            if (shortsIndex >= 0 && parts[shortsIndex + 1]) {
-                return `https://www.youtube.com/embed/${parts[shortsIndex + 1]}?autoplay=1&rel=0`;
-            }
-        }
-
-        if (host.endsWith('facebook.com') || host.endsWith('fb.watch')) {
-            return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&autoplay=true`;
-        }
-    } catch (error) {
-        return null;
-    }
-
-    return url;
-};
+import { getStreamEmbedUrl } from '../utils/streamEmbed';
+import { WebRtcLiveViewer } from '../components/WebRtcLiveViewer';
 
 export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () => void }) => {
     const [match, setMatch] = useState<any>(null);
@@ -283,6 +248,8 @@ export const MatchDetails = ({ matchId, onBack }: { matchId: string, onBack: () 
                                 </p>
                             </div>
                         </div>
+
+                        <WebRtcLiveViewer matchId={matchId} />
 
                         {match.streamUrl && (
                             <div className="overflow-hidden rounded-[2.5rem] border border-gray-100 bg-black shadow-sm">

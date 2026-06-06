@@ -29,6 +29,16 @@ type SnapshotPayload =
   | { kind: 'query'; id: string; path: string; constraints: QueryConstraint[]; docs: any[] };
 
 const subscriptions = new Map<string, Map<string, SocketSubscription>>();
+const broadcastersByMatch = new Map<string, string>();
+const viewerMatchesBySocket = new Map<string, Set<string>>();
+
+function getWebRtcRoom(matchId: string) {
+  return `webrtc:match:${matchId}`;
+}
+
+function getMatchId(raw: any) {
+  return String(raw?.matchId || '').trim();
+}
 
 function getCollectionPath(path: string) {
   const segments = String(path || '').split('/').filter(Boolean);
@@ -144,8 +154,120 @@ export function createSocketHub(server: HttpServer) {
       subscriptions.get(socket.id)?.delete(String(subscriptionId || ''));
     });
 
+    socket.on('webrtc:broadcaster:join', (raw: { matchId?: string }) => {
+      const matchId = getMatchId(raw);
+      if (!matchId) return;
+
+      const previousBroadcaster = broadcastersByMatch.get(matchId);
+      if (previousBroadcaster && previousBroadcaster !== socket.id) {
+        io.to(previousBroadcaster).emit('webrtc:broadcaster:replaced', { matchId });
+      }
+
+      broadcastersByMatch.set(matchId, socket.id);
+      socket.join(getWebRtcRoom(matchId));
+      socket.to(getWebRtcRoom(matchId)).emit('webrtc:broadcaster:ready', { matchId });
+
+      const room = io.sockets.adapter.rooms.get(getWebRtcRoom(matchId));
+      for (const viewerId of room || []) {
+        if (viewerId !== socket.id) {
+          io.to(socket.id).emit('webrtc:viewer:joined', { matchId, viewerId });
+        }
+      }
+    });
+
+    socket.on('webrtc:broadcaster:leave', (raw: { matchId?: string }) => {
+      const matchId = getMatchId(raw);
+      if (!matchId || broadcastersByMatch.get(matchId) !== socket.id) return;
+
+      broadcastersByMatch.delete(matchId);
+      socket.to(getWebRtcRoom(matchId)).emit('webrtc:broadcaster:left', { matchId });
+      socket.leave(getWebRtcRoom(matchId));
+    });
+
+    socket.on('webrtc:viewer:join', (raw: { matchId?: string }) => {
+      const matchId = getMatchId(raw);
+      if (!matchId) return;
+
+      socket.join(getWebRtcRoom(matchId));
+      const matches = viewerMatchesBySocket.get(socket.id) || new Set<string>();
+      matches.add(matchId);
+      viewerMatchesBySocket.set(socket.id, matches);
+
+      const broadcasterId = broadcastersByMatch.get(matchId);
+      if (broadcasterId) {
+        io.to(socket.id).emit('webrtc:broadcaster:ready', { matchId });
+        io.to(broadcasterId).emit('webrtc:viewer:joined', { matchId, viewerId: socket.id });
+      }
+    });
+
+    socket.on('webrtc:viewer:leave', (raw: { matchId?: string }) => {
+      const matchId = getMatchId(raw);
+      if (!matchId) return;
+
+      socket.leave(getWebRtcRoom(matchId));
+      viewerMatchesBySocket.get(socket.id)?.delete(matchId);
+      const broadcasterId = broadcastersByMatch.get(matchId);
+      if (broadcasterId) {
+        io.to(broadcasterId).emit('webrtc:viewer:left', { matchId, viewerId: socket.id });
+      }
+    });
+
+    socket.on('webrtc:offer', (raw: { matchId?: string; target?: string; description?: unknown }) => {
+      const matchId = getMatchId(raw);
+      const target = String(raw?.target || '');
+      if (!matchId || !target || broadcastersByMatch.get(matchId) !== socket.id) return;
+
+      io.to(target).emit('webrtc:offer', {
+        matchId,
+        from: socket.id,
+        description: raw.description,
+      });
+    });
+
+    socket.on('webrtc:answer', (raw: { matchId?: string; target?: string; description?: unknown }) => {
+      const matchId = getMatchId(raw);
+      const target = String(raw?.target || '');
+      if (!matchId || !target) return;
+
+      io.to(target).emit('webrtc:answer', {
+        matchId,
+        from: socket.id,
+        description: raw.description,
+      });
+    });
+
+    socket.on('webrtc:ice-candidate', (raw: { matchId?: string; target?: string; candidate?: unknown }) => {
+      const matchId = getMatchId(raw);
+      const target = String(raw?.target || '');
+      if (!matchId || !target) return;
+
+      io.to(target).emit('webrtc:ice-candidate', {
+        matchId,
+        from: socket.id,
+        candidate: raw.candidate,
+      });
+    });
+
     socket.on('disconnect', () => {
       subscriptions.delete(socket.id);
+
+      for (const [matchId, broadcasterId] of broadcastersByMatch.entries()) {
+        if (broadcasterId === socket.id) {
+          broadcastersByMatch.delete(matchId);
+          socket.to(getWebRtcRoom(matchId)).emit('webrtc:broadcaster:left', { matchId });
+        }
+      }
+
+      const viewerMatches = viewerMatchesBySocket.get(socket.id);
+      if (viewerMatches) {
+        for (const matchId of viewerMatches) {
+          const broadcasterId = broadcastersByMatch.get(matchId);
+          if (broadcasterId) {
+            io.to(broadcasterId).emit('webrtc:viewer:left', { matchId, viewerId: socket.id });
+          }
+        }
+        viewerMatchesBySocket.delete(socket.id);
+      }
     });
   });
 
