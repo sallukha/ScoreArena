@@ -46,6 +46,15 @@ function getFirebaseAuthMessage(err: any) {
   }
 }
 
+function getGoogleAuthMessage(err: any) {
+  const code = String(err?.code || '').trim();
+  const message = String(err?.message || '').trim();
+  if (code === '10' || /^10(?::|$)/.test(message)) {
+    return 'Google login configuration error. Please install the latest app build.';
+  }
+  return message || 'Login failed. Please try again.';
+}
+
 export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
   const [method, setMethod] = useState<'google' | 'phone'>('google');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -182,7 +191,7 @@ export const Login = ({ onLoginSuccess }: { onLoginSuccess: () => void }) => {
       String(err?.message || '').toLowerCase().includes('closed by user');
 
     if (!isCancelled) {
-      setError(err?.message || 'Login failed. Please try again.');
+      setError(getGoogleAuthMessage(err));
     }
   } finally {
     setLoading(false);

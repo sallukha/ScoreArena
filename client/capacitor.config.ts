@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.scorearena.app',
+  appId: 'com.scorewala.app',
   appName: 'ScoreArena',
   webDir: 'dist',
   server: {
