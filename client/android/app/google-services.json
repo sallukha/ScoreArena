@@ -9,6 +9,43 @@
       "client_info": {
         "mobilesdk_app_id": "1:838787006701:android:496433bc9cb45343280ce4",
         "android_client_info": {
+          "package_name": "com.scorearena.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "838787006701-4pljrha0kch907fuef2ol1b7nu8lkv27.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.scorearena.app",
+            "certificate_hash": "9305e1809a74c969ecc241e7a2f24d736974cfa2"
+          }
+        },
+        {
+          "client_id": "838787006701-9aii1bk6tjtouv8241h55ni5e8tesaue.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyClaObefHTKvPCuJCgmALIYXOtcSgYjktg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "838787006701-9aii1bk6tjtouv8241h55ni5e8tesaue.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:838787006701:android:496433bc9cb45343280ce4",
+        "android_client_info": {
           "package_name": "com.scorewala.app"
         }
       },
