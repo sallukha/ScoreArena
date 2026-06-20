@@ -368,7 +368,9 @@ const WicketModal = ({
   const [dismissedBatterId, setDismissedBatterId] = useState('');
   const needsFielder = wicketType === 'caught' || wicketType === 'run-out' || wicketType === 'stumped';
   const canChooseDismissedBatter = wicketType === 'run-out' || wicketType === 'retired-out' || wicketType === 'retired-hurt';
-  const canConfirm = Boolean(wicketType) && (!needsFielder || Boolean(fielderId));
+  const canConfirm = Boolean(wicketType)
+    && (!needsFielder || Boolean(fielderId))
+    && (!canChooseDismissedBatter || Boolean(dismissedBatterId));
 
   useEffect(() => {
     if (!isOpen) {
@@ -381,10 +383,8 @@ const WicketModal = ({
   useEffect(() => {
     if (!canChooseDismissedBatter) {
       setDismissedBatterId('');
-    } else if (!dismissedBatterId && battingOptions[0]?.id) {
-      setDismissedBatterId(battingOptions[0].id);
     }
-  }, [battingOptions, canChooseDismissedBatter, dismissedBatterId]);
+  }, [canChooseDismissedBatter]);
 
   const types = [
     { id: 'bowled', label: 'Bowled' },
@@ -448,16 +448,29 @@ const WicketModal = ({
 
             {canChooseDismissedBatter && battingOptions.length > 0 && (
               <div className="flex flex-col gap-3">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Dismissed Batter</p>
-                <select
-                  value={dismissedBatterId}
-                  onChange={(e) => setDismissedBatterId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm font-medium"
-                >
+                <div>
+                  <p className="text-sm font-black text-gray-900">Kaun out hua?</p>
+                  <p className="mt-1 text-xs font-medium text-gray-500">Run ke beech jis batter ka wicket gira, use select karein.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   {battingOptions.map((player) => (
-                    <option key={player.id} value={player.id}>{player.name} ({player.label})</option>
+                    <button
+                      type="button"
+                      key={player.id}
+                      onClick={() => setDismissedBatterId(player.id)}
+                      className={`rounded-2xl border p-4 text-left transition-all ${
+                        dismissedBatterId === player.id
+                          ? 'border-red-600 bg-red-50 ring-2 ring-red-100'
+                          : 'border-gray-200 bg-white'
+                      }`}
+                    >
+                      <span className="block truncate text-sm font-black text-gray-900">{player.name}</span>
+                      <span className={`mt-1 block text-[10px] font-black uppercase tracking-wider ${
+                        dismissedBatterId === player.id ? 'text-red-600' : 'text-gray-400'
+                      }`}>{player.label}</span>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
             )}
 
@@ -1248,6 +1261,13 @@ export const Scorer = ({ matchId, onBack, openStreamPanel = false }: { matchId: 
 
     if (!match.striker || !match.bowler) {
       alert('Please select striker and bowler first!');
+      return;
+    }
+
+    const needsDismissedBatter = type === 'run-out' || type === 'retired-out' || type === 'retired-hurt';
+    const currentBatterIds = [match.striker, match.nonStriker].filter(Boolean);
+    if (needsDismissedBatter && (!dismissedBatterId || !currentBatterIds.includes(dismissedBatterId))) {
+      alert('Kaun out hua hai: striker ya non-striker select karein.');
       return;
     }
 
