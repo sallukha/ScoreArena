@@ -4,8 +4,8 @@
   "description": "Live Cricket Scoring App",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FFC107",
-  "theme_color": "#FFC107",
+  "background_color": "#FFFFFF",
+  "theme_color": "#0B1F3A",
   "icons": [
     {
       "src": "/app-icon-192.png",
